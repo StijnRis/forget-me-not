@@ -1,6 +1,14 @@
 import { desc, and, eq, isNull } from 'drizzle-orm';
 import { db } from './drizzle';
-import { activityLogs, teamMembers, teams, users } from './schema';
+import {
+  activityLogs,
+  habits,
+  invitations,
+  stories,
+  teamMembers,
+  teams,
+  users,
+} from './schema';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/lib/auth/session';
 
@@ -59,7 +67,7 @@ export async function updateTeamSubscription(
     .update(teams)
     .set({
       ...subscriptionData,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     })
     .where(eq(teams.id, teamId));
 }
@@ -68,7 +76,7 @@ export async function getUserWithTeam(userId: number) {
   const result = await db
     .select({
       user: users,
-      teamId: teamMembers.teamId
+      teamId: teamMembers.teamId,
     })
     .from(users)
     .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
@@ -90,7 +98,7 @@ export async function getActivityLogs() {
       action: activityLogs.action,
       timestamp: activityLogs.timestamp,
       ipAddress: activityLogs.ipAddress,
-      userName: users.name
+      userName: users.name,
     })
     .from(activityLogs)
     .leftJoin(users, eq(activityLogs.userId, users.id))
@@ -99,32 +107,85 @@ export async function getActivityLogs() {
     .limit(10);
 }
 
-export async function getTeamForUser() {
-  const user = await getUser();
+export async function getTeamsForUser(userId?: number) {
+  const user = userId ? { id: userId } : await getUser();
   if (!user) {
+    return [];
+  }
+
+  return db.query.teamMembers.findMany({
+    where: eq(teamMembers.userId, user.id),
+    with: {
+      team: true,
+    },
+    orderBy: desc(teamMembers.joinedAt),
+  });
+}
+
+/** @deprecated Use getTeamsForUser or getTeamWithMembers(teamId) */
+export async function getTeamForUser() {
+  const memberships = await getTeamsForUser();
+  if (memberships.length === 0) {
     return null;
   }
 
-  const result = await db.query.teamMembers.findFirst({
-    where: eq(teamMembers.userId, user.id),
-    with: {
-      team: {
-        with: {
-          teamMembers: {
-            with: {
-              user: {
-                columns: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  const teamId = memberships[0].teamId;
+  return getTeamWithMembers(teamId);
+}
 
-  return result?.team || null;
+export async function getTeamWithMembers(teamId: number) {
+  return db.query.teams.findFirst({
+    where: eq(teams.id, teamId),
+    with: {
+      teamMembers: {
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              profileImageUrl: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export async function getPendingInvitationsForUser(email: string) {
+  return db.query.invitations.findMany({
+    where: and(eq(invitations.email, email), eq(invitations.status, 'pending')),
+    with: {
+      team: true,
+      invitedBy: {
+        columns: { id: true, name: true, email: true },
+      },
+    },
+    orderBy: desc(invitations.invitedAt),
+  });
+}
+
+export async function getStoriesForTeam(teamId: number) {
+  return db.query.stories.findMany({
+    where: eq(stories.teamId, teamId),
+    orderBy: desc(stories.createdAt),
+    with: {
+      author: {
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          profileImageUrl: true,
+        },
+      },
+    },
+  });
+}
+
+export async function getHabitsForTeam(teamId: number) {
+  return db.query.habits.findMany({
+    where: eq(habits.teamId, teamId),
+    orderBy: habits.scheduledTime,
+  });
 }

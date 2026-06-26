@@ -31,6 +31,18 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             ? 'Sign in to your account'
             : 'Create your account'}
         </h2>
+        {inviteId && mode === 'signup' && (
+          <p className="mt-3 text-center text-sm text-sky-700 bg-sky-50 rounded-lg px-4 py-2">
+            You&apos;ve been invited to join a family group. Create an account
+            with the invited email to join.
+          </p>
+        )}
+        {inviteId && mode === 'signin' && (
+          <p className="mt-3 text-center text-sm text-sky-700 bg-sky-50 rounded-lg px-4 py-2">
+            Sign in with the invited email, then accept the invitation on your
+            teams page.
+          </p>
+        )}
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -127,7 +139,11 @@ export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             <Link
               href={`${mode === 'signin' ? '/sign-up' : '/sign-in'}${
                 redirect ? `?redirect=${redirect}` : ''
-              }${priceId ? `&priceId=${priceId}` : ''}`}
+              }${priceId ? `${redirect ? '&' : '?'}priceId=${priceId}` : ''}${
+                inviteId
+                  ? `${redirect || priceId ? '&' : '?'}inviteId=${inviteId}`
+                  : ''
+              }`}
               className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-full shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
             >
               {mode === 'signin'

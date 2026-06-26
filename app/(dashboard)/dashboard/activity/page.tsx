@@ -9,6 +9,10 @@ import {
   UserMinus,
   Mail,
   CheckCircle,
+  BookOpen,
+  Trash2,
+  Bell,
+  UserCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { ActivityType } from '@/lib/db/schema';
@@ -25,6 +29,11 @@ const iconMap: Record<ActivityType, LucideIcon> = {
   [ActivityType.REMOVE_TEAM_MEMBER]: UserMinus,
   [ActivityType.INVITE_TEAM_MEMBER]: Mail,
   [ActivityType.ACCEPT_INVITATION]: CheckCircle,
+  [ActivityType.CREATE_STORY]: BookOpen,
+  [ActivityType.DELETE_STORY]: Trash2,
+  [ActivityType.CREATE_HABIT]: Bell,
+  [ActivityType.DELETE_HABIT]: Trash2,
+  [ActivityType.UPDATE_PROFILE]: UserCircle,
 };
 
 function getRelativeTime(date: Date) {
@@ -63,6 +72,16 @@ function formatAction(action: ActivityType): string {
       return 'You invited a team member';
     case ActivityType.ACCEPT_INVITATION:
       return 'You accepted an invitation';
+    case ActivityType.CREATE_STORY:
+      return 'You added a story';
+    case ActivityType.DELETE_STORY:
+      return 'You removed a story';
+    case ActivityType.CREATE_HABIT:
+      return 'You scheduled a reminder';
+    case ActivityType.DELETE_HABIT:
+      return 'You removed a reminder';
+    case ActivityType.UPDATE_PROFILE:
+      return 'You updated your profile';
     default:
       return 'Unknown action occurred';
   }

@@ -1,12 +1,13 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
-import { getUser, getTeamForUser } from '@/lib/db/queries';
+import { getUser, getTeamsForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.'
+  title: 'Forget Me Not — Stay connected through dementia',
+  description:
+    'Help families stay close to loved ones with dementia. Share personal stories, schedule gentle reminders, and give your loved one a simple, calming page designed for ease of use.'
 };
 
 export const viewport: Viewport = {
@@ -32,7 +33,7 @@ export default function RootLayout({
               // We do NOT await here
               // Only components that read this data will suspend
               '/api/user': getUser(),
-              '/api/team': getTeamForUser()
+              '/api/teams': getTeamsForUser(),
             }
           }}
         >

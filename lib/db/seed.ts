@@ -50,7 +50,7 @@ async function seed() {
       {
         email: email,
         passwordHash: passwordHash,
-        role: "owner",
+        role: 'member',
       },
     ])
     .returning();
@@ -67,7 +67,7 @@ async function seed() {
   await db.insert(teamMembers).values({
     teamId: team.id,
     userId: user.id,
-    role: 'owner',
+    role: 'caregiver',
   });
 
   await createStripeProducts();

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TeamDataWithMembers, User } from '@/lib/db/schema';
-import { getTeamForUser, getUser } from '@/lib/db/queries';
+import { getTeamWithMembers, getUser } from '@/lib/db/queries';
+import { getMembershipForTeam } from '@/lib/team-access';
 import { redirect } from 'next/navigation';
 
 export type ActionState = {
@@ -65,7 +66,21 @@ export function withTeam<T>(action: ActionWithTeamFunction<T>) {
       redirect('/sign-in');
     }
 
-    const team = await getTeamForUser();
+    const teamIdRaw = formData.get('teamId');
+    let team: TeamDataWithMembers | null | undefined;
+
+    if (teamIdRaw) {
+      const teamId = parseInt(String(teamIdRaw), 10);
+      const membership = await getMembershipForTeam(user.id, teamId);
+      if (!membership) {
+        throw new Error('Team not found');
+      }
+      team = await getTeamWithMembers(teamId);
+    } else {
+      const { getTeamForUser } = await import('@/lib/db/queries');
+      team = await getTeamForUser();
+    }
+
     if (!team) {
       throw new Error('Team not found');
     }

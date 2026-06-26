@@ -14,6 +14,7 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: varchar('role', { length: 20 }).notNull().default('member'),
+  profileImageUrl: text('profile_image_url'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   deletedAt: timestamp('deleted_at'),
@@ -54,6 +55,33 @@ export const activityLogs = pgTable('activity_logs', {
   ipAddress: varchar('ip_address', { length: 45 }),
 });
 
+export const stories = pgTable('stories', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  authorId: integer('author_id')
+    .notNull()
+    .references(() => users.id),
+  title: varchar('title', { length: 200 }),
+  content: text('content').notNull(),
+  imageUrl: text('image_url'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const habits = pgTable('habits', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  createdById: integer('created_by_id')
+    .notNull()
+    .references(() => users.id),
+  title: varchar('title', { length: 100 }).notNull(),
+  scheduledTime: varchar('scheduled_time', { length: 5 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const invitations = pgTable('invitations', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
@@ -72,11 +100,37 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
   invitations: many(invitations),
+  stories: many(stories),
+  habits: many(habits),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+  stories: many(stories),
+  habits: many(habits),
+}));
+
+export const storiesRelations = relations(stories, ({ one }) => ({
+  team: one(teams, {
+    fields: [stories.teamId],
+    references: [teams.id],
+  }),
+  author: one(users, {
+    fields: [stories.authorId],
+    references: [users.id],
+  }),
+}));
+
+export const habitsRelations = relations(habits, ({ one }) => ({
+  team: one(teams, {
+    fields: [habits.teamId],
+    references: [teams.id],
+  }),
+  createdBy: one(users, {
+    fields: [habits.createdById],
+    references: [users.id],
+  }),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -122,10 +176,18 @@ export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+export type Story = typeof stories.$inferSelect;
+export type NewStory = typeof stories.$inferInsert;
+export type Habit = typeof habits.$inferSelect;
+export type NewHabit = typeof habits.$inferInsert;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
-    user: Pick<User, 'id' | 'name' | 'email'>;
+    user: Pick<User, 'id' | 'name' | 'email' | 'profileImageUrl'>;
   })[];
+};
+
+export type StoryWithAuthor = Story & {
+  author: Pick<User, 'id' | 'name' | 'email' | 'profileImageUrl'>;
 };
 
 export enum ActivityType {
@@ -139,4 +201,9 @@ export enum ActivityType {
   REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
+  CREATE_STORY = 'CREATE_STORY',
+  DELETE_STORY = 'DELETE_STORY',
+  CREATE_HABIT = 'CREATE_HABIT',
+  DELETE_HABIT = 'DELETE_HABIT',
+  UPDATE_PROFILE = 'UPDATE_PROFILE',
 }
