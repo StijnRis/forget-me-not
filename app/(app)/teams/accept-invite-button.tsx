@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useEffect } from 'react';
-import { acceptInvitation } from '@/app/(login)/actions';
+import { acceptInvitation } from '@/lib/actions/auth';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';

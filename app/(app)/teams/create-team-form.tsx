@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { ActionState } from '@/lib/auth/actions';
-import { createTeam } from '@/app/(login)/actions';
+import { createTeam } from '@/lib/actions/auth';
 
 export function CreateTeamForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(

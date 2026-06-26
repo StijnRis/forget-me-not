@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getUser } from '@/lib/db/queries';
+import { requireUser } from '@/lib/auth/require-user';
 import { requireCaregiverOnTeam } from '@/lib/team-access';
 import { TeamCaregiverDashboard } from './team-caregiver-dashboard';
 
@@ -8,11 +8,7 @@ export default async function TeamCaregiverPage({
 }: {
   params: Promise<{ teamId: string }>;
 }) {
-  const user = await getUser();
-  if (!user) {
-    redirect('/sign-in');
-  }
-
+  const user = await requireUser();
   const { teamId: teamIdStr } = await params;
   const teamId = parseInt(teamIdStr, 10);
   if (Number.isNaN(teamId)) {

@@ -1,10 +1,16 @@
 import { compare, hash } from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { NewUser } from '@/lib/db/schema';
 
 const key = new TextEncoder().encode(process.env.AUTH_SECRET);
 const SALT_ROUNDS = 10;
+
+export type SessionData = {
+  user: { id: number };
+  expires: string;
+};
 
 export async function hashPassword(password: string) {
   return hash(password, SALT_ROUNDS);
@@ -16,11 +22,6 @@ export async function comparePasswords(
 ) {
   return compare(plainTextPassword, hashedPassword);
 }
-
-type SessionData = {
-  user: { id: number };
-  expires: string;
-};
 
 export async function signToken(payload: SessionData) {
   return await new SignJWT(payload)
@@ -37,10 +38,32 @@ export async function verifyToken(input: string) {
   return payload as SessionData;
 }
 
+/** Validate a session token without touching the database. */
+export async function parseSessionToken(
+  token: string
+): Promise<SessionData | null> {
+  try {
+    const data = await verifyToken(token);
+    if (!data?.user || typeof data.user.id !== 'number') {
+      return null;
+    }
+    if (!data.expires || new Date(data.expires) < new Date()) {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export async function getSession() {
   const session = (await cookies()).get('session')?.value;
   if (!session) return null;
-  return await verifyToken(session);
+  return parseSessionToken(session);
+}
+
+export async function clearSession() {
+  (await cookies()).delete('session');
 }
 
 export async function setSession(user: NewUser) {
@@ -56,4 +79,10 @@ export async function setSession(user: NewUser) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
   });
+}
+
+/** Clear stale cookies and send the user to sign-in. */
+export async function signInRedirect() {
+  await clearSession();
+  redirect('/sign-in');
 }

@@ -1,34 +1,43 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken } from '@/lib/auth/session';
+import { parseSessionToken } from '@/lib/auth/session';
 
 const protectedRoutes = ['/dashboard', '/teams'];
 
+function redirectToSignIn(request: NextRequest, clearCookie: boolean) {
+  const response = NextResponse.redirect(new URL('/sign-in', request.url));
+  if (clearCookie) {
+    response.cookies.delete('session');
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionCookie = request.cookies.get('session');
   const isProtectedRoute = protectedRoutes.some((route) =>
     pathname.startsWith(route)
   );
+  const sessionToken = request.cookies.get('session')?.value;
 
-  if (!sessionCookie?.value) {
+  if (!sessionToken) {
     if (isProtectedRoute) {
-      return NextResponse.redirect(new URL('/sign-in', request.url));
+      return redirectToSignIn(request, false);
     }
     return NextResponse.next();
   }
 
-  try {
-    await verifyToken(sessionCookie.value);
-    return NextResponse.next();
-  } catch (error) {
-    console.error('Invalid session:', error);
-    const response = isProtectedRoute
-      ? NextResponse.redirect(new URL('/sign-in', request.url))
-      : NextResponse.next();
+  const session = await parseSessionToken(sessionToken);
+
+  if (!session) {
+    if (isProtectedRoute) {
+      return redirectToSignIn(request, true);
+    }
+    const response = NextResponse.next();
     response.cookies.delete('session');
     return response;
   }
+
+  return NextResponse.next();
 }
 
 export const config = {

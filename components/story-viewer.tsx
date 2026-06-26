@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Bell, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
@@ -40,28 +40,42 @@ function playReminderSound() {
 
 type StoryViewerProps = {
   teamId: number;
+  storyId: number;
   teamName: string;
   previewMode?: boolean;
+  initialStories?: StoryWithAuthor[];
+  initialHabits?: Habit[];
 };
 
 type StoryTransition = 'initial' | 'older' | 'newer';
 
 export function StoryViewer({
   teamId,
+  storyId,
   teamName,
   previewMode = false,
+  initialStories,
+  initialHabits,
 }: StoryViewerProps) {
   const router = useRouter();
-  const params = useParams<{ storyId?: string }>();
-  const storyId = params.storyId ? parseInt(params.storyId, 10) : undefined;
   const [transition, setTransition] = useState<StoryTransition>('initial');
-  const { data: stories = [] } = useSWR<StoryWithAuthor[]>(
+  const { data: stories = initialStories ?? [] } = useSWR<StoryWithAuthor[]>(
     `/api/teams/${teamId}/stories`,
-    fetcher
+    fetcher,
+    {
+      fallbackData: initialStories,
+      revalidateOnMount: !initialStories,
+      revalidateOnFocus: false,
+    }
   );
-  const { data: habits = [] } = useSWR<Habit[]>(
+  const { data: habits = initialHabits ?? [] } = useSWR<Habit[]>(
     `/api/teams/${teamId}/habits`,
-    fetcher
+    fetcher,
+    {
+      fallbackData: initialHabits,
+      revalidateOnMount: !initialHabits,
+      revalidateOnFocus: false,
+    }
   );
   const [activeReminder, setActiveReminder] = useState<Habit | null>(null);
   const notifiedRef = useRef<Set<string>>(new Set());
@@ -70,7 +84,7 @@ export function StoryViewer({
 
   // Stories are newest-first (index 0 = most recent)
   const index = useMemo(() => {
-    if (!storyId || stories.length === 0) return -1;
+    if (stories.length === 0) return -1;
     return stories.findIndex((s) => s.id === storyId);
   }, [stories, storyId]);
 
@@ -114,11 +128,11 @@ export function StoryViewer({
   }, [story?.id, resetInactivityTimer]);
 
   useEffect(() => {
-    if (stories.length === 0 || !storyId) return;
+    if (initialStories || stories.length === 0) return;
     if (index === -1) {
       router.replace(teamStoryViewPath(teamId, stories[0].id));
     }
-  }, [stories, storyId, index, router, teamId]);
+  }, [initialStories, stories, index, router, teamId]);
 
   const checkReminders = useCallback(() => {
     const now = new Date();

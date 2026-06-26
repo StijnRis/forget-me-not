@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CircleIcon, Loader2 } from 'lucide-react';
-import { signIn, signUp } from './actions';
+import { signIn, signUp } from '@/lib/actions/auth';
 import { ActionState } from '@/lib/auth/actions';
 
-export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
+export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
   const priceId = searchParams.get('priceId');

@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     if (!elevenlabs) {
       logTtsError('not configured (503)', {
         envKeyPresent: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
+        hint: 'Add ELEVENLABS_API_KEY to .env in the project root, save the file, then restart the dev server.',
       });
       return NextResponse.json(
         { error: 'Text-to-speech is not configured' },

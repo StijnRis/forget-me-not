@@ -68,7 +68,7 @@ function BillingSection() {
 
 export default function SettingsPage() {
   return (
-    <section>
+    <section className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-2">Billing</h1>
       <p className="text-muted-foreground mb-6">
         Manage subscriptions for your family groups. To manage members, stories,

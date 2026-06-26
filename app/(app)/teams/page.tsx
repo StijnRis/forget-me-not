@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { getPendingInvitationsForUser, getTeamsForUser, getUser } from '@/lib/db/queries';import { Button } from '@/components/ui/button';
+import { getPendingInvitationsForUser, getTeamsForUser, getUser } from '@/lib/db/queries';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TEAM_ROLE_LABELS, TeamRole, isCaregiver } from '@/lib/team-roles';
 import { AcceptInviteButton } from './accept-invite-button';

@@ -20,7 +20,7 @@ import {
   deleteStory,
   updateProfile,
 } from '@/app/(app)/actions';
-import { inviteTeamMember, removeTeamMember } from '@/app/(login)/actions';
+import { inviteTeamMember, removeTeamMember } from '@/lib/actions/auth';
 import type { Habit, StoryWithAuthor, Team, TeamMember, User } from '@/lib/db/schema';
 import { TEAM_ROLE_LABELS, TeamRole, isCaregiver } from '@/lib/team-roles';
 import {

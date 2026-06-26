@@ -1,19 +1,10 @@
-import { AuthGuard } from '@/components/auth-guard';
+import { requireUser } from '@/lib/auth/require-user';
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <AuthGuard
-      fallback={
-        <div className="min-h-[100dvh] flex flex-col bg-gray-50" />
-      }
-    >
-      <div className="min-h-[100dvh] flex flex-col bg-gray-50">
-        {children}
-      </div>
-    </AuthGuard>
-  );
+  await requireUser();
+  return <>{children}</>;
 }
