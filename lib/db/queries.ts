@@ -251,5 +251,55 @@ export async function getStoryEngagementForTeam(teamId: number) {
     watchedStoryIds: Array.from(watchedByUser.get(member.user.id) ?? []),
   }));
 
-  return { viewers: engagement, stories };
+  const missedNotifications = await getMissedNotificationsForTeam(teamId);
+
+  return { viewers: engagement, stories, missedNotifications };
+}
+
+export type MissedNotificationEvent = {
+  userId: number;
+  userName: string;
+  habitId: number;
+  title: string;
+  timestamp: Date;
+};
+
+export async function getMissedNotificationsForTeam(teamId: number) {
+  const { parseMissedNotification } = await import('@/lib/activity');
+
+  const logs = await db
+    .select({
+      userId: activityLogs.userId,
+      action: activityLogs.action,
+      timestamp: activityLogs.timestamp,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(activityLogs)
+    .innerJoin(users, eq(activityLogs.userId, users.id))
+    .where(
+      and(
+        eq(activityLogs.teamId, teamId),
+        like(activityLogs.action, `${ActivityType.MISSED_NOTIFICATION}:%`)
+      )
+    )
+    .orderBy(desc(activityLogs.timestamp))
+    .limit(20);
+
+  const events: MissedNotificationEvent[] = [];
+
+  for (const log of logs) {
+    if (!log.userId) continue;
+    const parsed = parseMissedNotification(log.action);
+    if (!parsed) continue;
+    events.push({
+      userId: log.userId,
+      userName: log.userName || log.userEmail.split('@')[0],
+      habitId: parsed.habitId,
+      title: parsed.title,
+      timestamp: log.timestamp,
+    });
+  }
+
+  return events;
 }

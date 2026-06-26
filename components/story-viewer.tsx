@@ -19,6 +19,7 @@ import { playReminderSound, primeReminderAudio } from '@/lib/reminder-sound';
 
 const INACTIVITY_MS = 15 * 60 * 1000;
 const AUTO_ADVANCE_DELAY_MS = 10_000;
+const MISSED_NOTIFICATION_MS = 60 * 60 * 1000;
 const TEST_REMINDER_TITLE = 'Remember to eat dinner';
 
 function formatCurrentTime(): string {
@@ -104,7 +105,13 @@ export function StoryViewer({
   const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastStoryProgressRef = useRef(0);
   const mainRef = useRef<HTMLElement>(null);
+  const missedNotificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeReminderRef = useRef<Habit | null>(null);
   const { needsGesture, enterFullscreen } = useStoryFullscreen();
+
+  useEffect(() => {
+    activeReminderRef.current = activeReminder;
+  }, [activeReminder]);
 
   // Stories are oldest-first (index 0 = story 1, the oldest)
   const index = useMemo(() => {
@@ -149,7 +156,60 @@ export function StoryViewer({
       clearInterval(pauseIntervalRef.current);
       pauseIntervalRef.current = null;
     }
+    if (missedNotificationTimerRef.current) {
+      clearTimeout(missedNotificationTimerRef.current);
+      missedNotificationTimerRef.current = null;
+    }
   }, [story?.id]);
+
+  const clearMissedNotificationTimer = useCallback(() => {
+    if (missedNotificationTimerRef.current) {
+      clearTimeout(missedNotificationTimerRef.current);
+      missedNotificationTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleMissedNotificationLog = useCallback(
+    (reminder: Habit) => {
+      if (previewMode) return;
+
+      clearMissedNotificationTimer();
+      const reminderKey = `${reminder.id}:${reminder.title}`;
+
+      missedNotificationTimerRef.current = setTimeout(() => {
+        const current = activeReminderRef.current;
+        if (
+          !current ||
+          `${current.id}:${current.title}` !== reminderKey
+        ) {
+          return;
+        }
+
+        void fetch(`/api/teams/${teamId}/reminders/missed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            habitId: current.id,
+            title: current.title,
+          }),
+        });
+      }, MISSED_NOTIFICATION_MS);
+    },
+    [previewMode, teamId, clearMissedNotificationTimer]
+  );
+
+  const showReminder = useCallback(
+    (reminder: Habit) => {
+      setActiveReminder(reminder);
+      scheduleMissedNotificationLog(reminder);
+    },
+    [scheduleMissedNotificationLog]
+  );
+
+  const dismissReminder = useCallback(() => {
+    clearMissedNotificationTimer();
+    setActiveReminder(null);
+  }, [clearMissedNotificationTimer]);
 
   const handleStoryDuration = useCallback((durationMs: number) => {
     if (durationMs <= 0) return;
@@ -232,6 +292,9 @@ export function StoryViewer({
       if (pauseIntervalRef.current) {
         clearInterval(pauseIntervalRef.current);
       }
+      if (missedNotificationTimerRef.current) {
+        clearTimeout(missedNotificationTimerRef.current);
+      }
     };
   }, []);
 
@@ -281,14 +344,14 @@ export function StoryViewer({
       const key = `${habit.id}-${now.toDateString()}-${habit.scheduledTime}`;
       if (habit.scheduledTime === current && !notifiedRef.current.has(key)) {
         notifiedRef.current.add(key);
-        setActiveReminder(habit);
+        showReminder(habit);
         void playReminderSound();
       }
     }
-  }, [habits]);
+  }, [habits, showReminder]);
 
   const triggerTestReminder = useCallback(() => {
-    setActiveReminder({
+    showReminder({
       id: -1,
       teamId,
       createdById: 0,
@@ -297,7 +360,7 @@ export function StoryViewer({
       createdAt: new Date(),
     });
     void playReminderSound();
-  }, [teamId]);
+  }, [teamId, showReminder]);
 
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true });
@@ -359,7 +422,7 @@ export function StoryViewer({
         {activeReminder && (
           <ReminderBanner
             reminder={activeReminder}
-            onDismiss={() => setActiveReminder(null)}
+            onDismiss={dismissReminder}
           />
         )}
         <main className="relative flex min-h-[100dvh] flex-col bg-sky-50 px-6">
@@ -422,7 +485,7 @@ export function StoryViewer({
       {activeReminder && (
         <ReminderBanner
           reminder={activeReminder}
-          onDismiss={() => setActiveReminder(null)}
+          onDismiss={dismissReminder}
         />
       )}
       <main
@@ -458,13 +521,13 @@ export function StoryViewer({
       <div
         key={story.id}
         className={cn(
-          'relative z-10 flex flex-1 flex-col justify-center px-6 py-10 max-w-3xl mx-auto w-full min-w-0',
+          'relative z-10 flex flex-1 flex-col min-h-0 px-6 py-6 sm:py-10 max-w-3xl mx-auto w-full',
           'animate-in fade-in duration-500 fill-mode-both',
           transition === 'older' && 'slide-in-from-left-8',
           transition === 'newer' && 'slide-in-from-right-8'
         )}
       >
-        <div className="flex items-center gap-4 mb-8">
+        <div className="shrink-0 flex items-center gap-4 mb-6 sm:mb-8">
           <Avatar className="h-16 w-16 border-2 border-white shadow-md">
             <AvatarImage src={story.author.profileImageUrl || ''} alt={authorName} />
             <AvatarFallback className="text-xl bg-sky-200 text-sky-900">
@@ -501,7 +564,7 @@ export function StoryViewer({
         {story.title && (
           <h1
             className={cn(
-              'text-3xl sm:text-4xl font-bold mb-6 break-words [overflow-wrap:anywhere]',
+              'shrink-0 text-3xl sm:text-4xl font-bold mb-4 sm:mb-6 break-words [overflow-wrap:anywhere]',
               story.imageUrl ? 'text-white' : 'text-gray-900'
             )}
           >
@@ -509,6 +572,7 @@ export function StoryViewer({
           </h1>
         )}
 
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <SpeakingStoryText
           storyId={story.id}
           text={story.content}
@@ -517,8 +581,9 @@ export function StoryViewer({
           onProgress={handleStoryProgress}
           onComplete={handleStoryComplete}
         />
+        </div>
 
-        <div className="mt-10 flex items-center justify-between gap-4">
+        <div className="mt-6 sm:mt-8 shrink-0 flex items-center justify-between gap-4">
           <Button
             size="lg"
             variant="secondary"

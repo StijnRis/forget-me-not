@@ -32,6 +32,7 @@ import {
   Eye,
   Loader2,
   Trash2,
+  TriangleAlert,
   UserCircle,
   UserPlus,
   Users,
@@ -63,6 +64,13 @@ type EngagementResponse = {
     id: number;
     title: string | null;
     content: string;
+  }>;
+  missedNotifications: Array<{
+    userId: number;
+    userName: string;
+    habitId: number;
+    title: string;
+    timestamp: string;
   }>;
 };
 
@@ -196,6 +204,41 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
           </Link>
         </Button>
       </div>
+
+      {engagement && engagement.missedNotifications.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50 shadow-md ring-1 ring-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-900">
+              <TriangleAlert className="h-5 w-5" />
+              Missed reminders
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-amber-800">
+              These reminders were shown but not dismissed within an hour.
+            </p>
+            <ul className="space-y-2">
+              {engagement.missedNotifications.map((event) => (
+                <li
+                  key={`${event.userId}-${event.habitId}-${event.timestamp}`}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-white px-4 py-3"
+                >
+                  <div>
+                    <p className="font-semibold text-amber-950">{event.title}</p>
+                    <p className="text-sm text-amber-800">
+                      {event.userName} did not dismiss this reminder
+                    </p>
+                  </div>
+                  <p className="text-sm text-amber-700 flex items-center gap-1 shrink-0">
+                    <Clock className="h-4 w-4" />
+                    {formatLastActive(event.timestamp)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

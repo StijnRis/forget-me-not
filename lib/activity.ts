@@ -8,6 +8,8 @@ import { activityLogs } from '@/lib/db/schema';
 type LogActivityOptions = {
   ipAddress?: string;
   storyId?: number;
+  reminderTitle?: string;
+  habitId?: number;
 };
 
 export async function logActivity(
@@ -22,16 +24,24 @@ export async function logActivity(
 
   let ipAddress = '';
   let storyId: number | undefined;
+  let reminderTitle: string | undefined;
+  let habitId: number | undefined;
 
   if (typeof ipAddressOrOptions === 'string') {
     ipAddress = ipAddressOrOptions;
   } else if (ipAddressOrOptions) {
     ipAddress = ipAddressOrOptions.ipAddress || '';
     storyId = ipAddressOrOptions.storyId;
+    reminderTitle = ipAddressOrOptions.reminderTitle;
+    habitId = ipAddressOrOptions.habitId;
   }
 
-  const action =
-    storyId != null ? `${type}:${storyId}` : type;
+  let action: string = type;
+  if (storyId != null) {
+    action = `${type}:${storyId}`;
+  } else if (habitId != null && reminderTitle != null) {
+    action = `${type}:${habitId}|${encodeURIComponent(reminderTitle)}`;
+  }
 
   const newActivity: NewActivityLog = {
     teamId,
@@ -40,6 +50,21 @@ export async function logActivity(
     ipAddress,
   };
   await db.insert(activityLogs).values(newActivity);
+}
+
+export function parseMissedNotification(
+  action: string
+): { habitId: number; title: string } | null {
+  if (!action.startsWith(`${ActivityType.MISSED_NOTIFICATION}:`)) {
+    return null;
+  }
+  const payload = action.slice(`${ActivityType.MISSED_NOTIFICATION}:`.length);
+  const pipeIndex = payload.indexOf('|');
+  if (pipeIndex === -1) return null;
+  const habitId = parseInt(payload.slice(0, pipeIndex), 10);
+  const title = decodeURIComponent(payload.slice(pipeIndex + 1));
+  if (Number.isNaN(habitId) || !title) return null;
+  return { habitId, title };
 }
 
 export function parseViewStoryId(action: string): number | null {

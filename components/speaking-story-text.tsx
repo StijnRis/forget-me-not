@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   alignmentFromApi,
@@ -33,11 +33,45 @@ export function SpeakingStoryText({
   const [error, setError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const onProgressRef = useRef(onProgress);
   const onDurationRef = useRef(onDuration);
   const onCompleteRef = useRef(onComplete);
   const completedRef = useRef(false);
+
+  const scrollWordIntoView = useCallback((index: number) => {
+    const container = scrollRef.current;
+    const word = wordRefs.current[index];
+    if (!container || !word) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const wordRect = word.getBoundingClientRect();
+    const padding = 48;
+
+    if (
+      wordRect.top >= containerRect.top + padding &&
+      wordRect.bottom <= containerRect.bottom - padding
+    ) {
+      return;
+    }
+
+    const targetTop =
+      word.offsetTop - container.clientHeight / 2 + word.offsetHeight / 2;
+
+    container.scrollTo({
+      top: Math.max(0, targetTop),
+      behavior: 'smooth',
+    });
+  }, []);
+
+  const highlightWord = useCallback(
+    (index: number) => {
+      setCurrentWordIndex(index);
+      scrollWordIntoView(index);
+    },
+    [scrollWordIntoView]
+  );
 
   useEffect(() => {
     onProgressRef.current = onProgress;
@@ -47,6 +81,7 @@ export function SpeakingStoryText({
 
   useEffect(() => {
     completedRef.current = false;
+    setCurrentWordIndex(null);
     onProgressRef.current?.(0);
   }, [storyId, text]);
 
@@ -95,7 +130,7 @@ export function SpeakingStoryText({
         const timings = processAlignments(alignmentFromApi(data.alignment));
         setWords(timings.length > 0 ? timings : fallbackWords(text));
         setAudioSrc(data.audio);
-      } catch (err) {
+      } catch {
         if (controller.signal.aborted) return;
         setError('Could not read aloud. Showing text only.');
         setWords(fallbackWords(text));
@@ -161,12 +196,7 @@ export function SpeakingStoryText({
       );
 
       if (index !== -1) {
-        setCurrentWordIndex(index);
-        wordRefs.current[index]?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'nearest',
-          inline: 'nearest',
-        });
+        highlightWord(index);
       }
     };
 
@@ -192,13 +222,14 @@ export function SpeakingStoryText({
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [words, audioSrc]);
+  }, [words, audioSrc, highlightWord]);
 
-  // No audio: advance progress on a gentle read-aloud pace
+  // No audio: advance progress and highlight words on a gentle read-aloud pace
   useEffect(() => {
     if (audioSrc || loading || !text.trim()) return;
 
-    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    const displayWords = words.length > 0 ? words : fallbackWords(text);
+    const wordCount = displayWords.length;
     const durationMs = Math.max(wordCount * 400, 8000);
     onDurationRef.current?.(durationMs);
     const startedAt = Date.now();
@@ -207,6 +238,15 @@ export function SpeakingStoryText({
       const elapsed = Date.now() - startedAt;
       const progress = Math.min(elapsed / durationMs, 1);
       onProgressRef.current?.(progress);
+
+      if (wordCount > 0) {
+        const index = Math.min(
+          Math.floor(progress * wordCount),
+          wordCount - 1
+        );
+        highlightWord(index);
+      }
+
       if (progress >= 1) {
         clearInterval(interval);
         if (!completedRef.current) {
@@ -217,12 +257,12 @@ export function SpeakingStoryText({
     }, 200);
 
     return () => clearInterval(interval);
-  }, [audioSrc, loading, storyId, text]);
+  }, [audioSrc, loading, storyId, text, words, highlightWord]);
 
   const displayWords = words.length > 0 ? words : fallbackWords(text);
 
   return (
-    <div className="relative">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {audioSrc && (
         <audio ref={audioRef} src={audioSrc} preload="auto" className="sr-only" />
       )}
@@ -230,7 +270,7 @@ export function SpeakingStoryText({
       {loading && (
         <div
           className={cn(
-            'flex items-center gap-2 text-lg mb-4',
+            'flex shrink-0 items-center gap-2 text-lg mb-4',
             onLightBackground ? 'text-sky-700' : 'text-white/90'
           )}
         >
@@ -242,7 +282,7 @@ export function SpeakingStoryText({
       {error && (
         <p
           className={cn(
-            'text-sm mb-4',
+            'shrink-0 text-sm mb-4',
             onLightBackground ? 'text-amber-700' : 'text-amber-200'
           )}
         >
@@ -251,27 +291,34 @@ export function SpeakingStoryText({
       )}
 
       <div
+        ref={scrollRef}
         className={cn(
-          'flex flex-wrap gap-x-1.5 gap-y-1 max-w-full text-2xl sm:text-3xl leading-relaxed break-words [overflow-wrap:anywhere]',
-          onLightBackground ? 'text-gray-800' : 'text-white'
+          'story-text-scroll min-h-0 flex-1 overflow-y-auto pr-2'
         )}
         aria-live="polite"
       >
-        {displayWords.map((item, index) => (
-          <span
-            key={`${storyId}-${index}`}
-            ref={(el) => {
-              wordRefs.current[index] = el;
-            }}
-            className={cn(
-              'rounded px-1 transition-colors duration-100',
-              currentWordIndex === index &&
-                'bg-amber-300 text-gray-900 font-bold shadow-sm'
-            )}
-          >
-            {item.word}
-          </span>
-        ))}
+        <div
+          className={cn(
+            'flex flex-wrap gap-x-1.5 gap-y-1 max-w-full text-2xl sm:text-3xl leading-relaxed break-words [overflow-wrap:anywhere] pb-4',
+            onLightBackground ? 'text-gray-800' : 'text-white'
+          )}
+        >
+          {displayWords.map((item, index) => (
+            <span
+              key={`${storyId}-${index}`}
+              ref={(el) => {
+                wordRefs.current[index] = el;
+              }}
+              className={cn(
+                'rounded px-1 transition-colors duration-100',
+                currentWordIndex === index &&
+                  'bg-amber-300 text-gray-900 font-bold shadow-sm'
+              )}
+            >
+              {item.word}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

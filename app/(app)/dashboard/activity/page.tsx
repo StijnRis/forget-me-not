@@ -14,10 +14,13 @@ import {
   Bell,
   UserCircle,
   Eye,
+  TriangleAlert,
   type LucideIcon,
 } from 'lucide-react';
 import { ActivityType } from '@/lib/db/schema';
 import { getActivityLogs } from '@/lib/db/queries';
+import { parseMissedNotification } from '@/lib/activity';
+import { cn } from '@/lib/utils';
 
 const iconMap: Record<ActivityType, LucideIcon> = {
   [ActivityType.SIGN_UP]: UserPlus,
@@ -36,6 +39,7 @@ const iconMap: Record<ActivityType, LucideIcon> = {
   [ActivityType.DELETE_HABIT]: Trash2,
   [ActivityType.UPDATE_PROFILE]: UserCircle,
   [ActivityType.VIEW_STORY]: Eye,
+  [ActivityType.MISSED_NOTIFICATION]: TriangleAlert,
 };
 
 function getRelativeTime(date: Date) {
@@ -86,9 +90,23 @@ function formatAction(action: ActivityType): string {
       return 'You updated your profile';
     case ActivityType.VIEW_STORY:
       return 'You finished watching a story';
+    case ActivityType.MISSED_NOTIFICATION:
+      return 'Missed notification';
     default:
       return 'Unknown action occurred';
   }
+}
+
+function formatActionLabel(action: string): string {
+  const baseAction = action.split(':')[0] as ActivityType;
+  if (baseAction === ActivityType.MISSED_NOTIFICATION) {
+    const parsed = parseMissedNotification(action);
+    if (parsed) {
+      return `Missed notification: "${parsed.title}"`;
+    }
+    return 'Missed notification';
+  }
+  return formatAction(baseAction);
 }
 
 export default async function ActivityPage() {
@@ -108,20 +126,47 @@ export default async function ActivityPage() {
             <ul className="space-y-4">
               {logs.map((log) => {
                 const baseAction = log.action.split(':')[0] as ActivityType;
+                const isMissed = baseAction === ActivityType.MISSED_NOTIFICATION;
                 const Icon = iconMap[baseAction] || Settings;
-                const formattedAction = formatAction(baseAction);
+                const formattedAction = formatActionLabel(log.action);
 
                 return (
-                  <li key={log.id} className="flex items-center space-x-4">
-                    <div className="bg-orange-100 rounded-full p-2">
-                      <Icon className="w-5 h-5 text-orange-600" />
+                  <li
+                    key={log.id}
+                    className={cn(
+                      'flex items-center space-x-4 rounded-lg p-3',
+                      isMissed && 'border border-amber-300 bg-amber-50'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'rounded-full p-2',
+                        isMissed ? 'bg-amber-200' : 'bg-orange-100'
+                      )}
+                    >
+                      <Icon
+                        className={cn(
+                          'w-5 h-5',
+                          isMissed ? 'text-amber-800' : 'text-orange-600'
+                        )}
+                      />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">
+                      <p
+                        className={cn(
+                          'text-sm font-medium',
+                          isMissed ? 'text-amber-950' : 'text-gray-900'
+                        )}
+                      >
                         {formattedAction}
                         {log.ipAddress && ` from IP ${log.ipAddress}`}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p
+                        className={cn(
+                          'text-xs',
+                          isMissed ? 'text-amber-700' : 'text-gray-500'
+                        )}
+                      >
                         {getRelativeTime(new Date(log.timestamp))}
                       </p>
                     </div>
