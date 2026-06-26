@@ -15,7 +15,6 @@ import { validatedActionWithUser } from '@/lib/auth/actions';
 import { getUserWithTeam } from '@/lib/db/queries';
 import { requireCaregiverOnTeam } from '@/lib/team-access';
 import { logActivity } from '@/lib/activity';
-import { CAREGIVER_RELATIONSHIP_VALUES } from '@/lib/caregiver-relationships';
 
 function teamPaths(teamId: number) {
   return [`/teams/${teamId}`, `/teams/${teamId}/view`, '/teams'];
@@ -135,7 +134,7 @@ const updateProfileSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v === '' ? undefined : v))
-    .pipe(z.enum(CAREGIVER_RELATIONSHIP_VALUES).optional()),
+    .pipe(z.string().max(50).optional()),
 });
 
 export const updateProfile = validatedActionWithUser(

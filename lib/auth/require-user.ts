@@ -1,10 +1,11 @@
 import { getUser } from '@/lib/db/queries';
 import { signInRedirect } from '@/lib/auth/session';
+import type { User } from '@/lib/db/schema';
 
-export async function requireUser() {
+export async function requireUser(): Promise<User> {
   const user = await getUser();
   if (!user) {
-    await signInRedirect();
+    return signInRedirect();
   }
   return user;
 }

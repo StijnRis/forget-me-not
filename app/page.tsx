@@ -19,7 +19,18 @@ import {
 
 export default function HomePage() {
   return (
-    <main>
+    <main className="relative">
+      <header className="sticky top-0 z-50 border-b border-gray-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-start gap-3">
+          <Button asChild size="sm" variant="outline" className="rounded-full">
+            <Link href="/sign-in">Login</Link>
+          </Button>
+          <Button asChild size="sm" className="rounded-full">
+            <Link href="/sign-up">Sign up</Link>
+          </Button>
+        </div>
+      </header>
+
       {/* Hero */}
       <section className="py-20 lg:py-28 bg-gradient-to-b from-sky-50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -40,20 +51,6 @@ export default function HomePage() {
                 ease of use.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row flex-wrap gap-4 sm:justify-center lg:justify-start">
-                <Button asChild size="lg" className="rounded-full text-lg">
-                  <Link href="/sign-up">
-                    Get started free
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full text-lg border-sky-500 text-sky-600 hover:bg-sky-50"
-                >
-                  <Link href="/sign-in">Login</Link>
-                </Button>
                 <Button
                   asChild
                   size="lg"
@@ -271,8 +268,7 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                variant="outline"
-                className="rounded-full text-lg border-gray-600 text-white hover:bg-gray-800 hover:text-white"
+                className="rounded-full text-lg bg-white text-gray-900 hover:bg-gray-100"
               >
                 <Link href="/pricing">See plans & pricing</Link>
               </Button>

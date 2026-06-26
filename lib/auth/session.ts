@@ -82,7 +82,7 @@ export async function setSession(user: NewUser) {
 }
 
 /** Clear stale cookies and send the user to sign-in. */
-export async function signInRedirect() {
+export async function signInRedirect(): Promise<never> {
   await clearSession();
   redirect('/sign-in');
 }

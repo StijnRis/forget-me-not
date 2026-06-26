@@ -32,9 +32,6 @@ export const CAREGIVER_RELATIONSHIP_LABELS: Record<CaregiverRelationship, string
 export function formatCaregiverRelationship(
   relationship: string | null | undefined
 ): string | null {
-  if (!relationship) return null;
-  return (
-    CAREGIVER_RELATIONSHIP_LABELS[relationship as CaregiverRelationship] ??
-    relationship.replace(/_/g, ' ')
-  );
+  if (!relationship?.trim()) return null;
+  return relationship.trim();
 }

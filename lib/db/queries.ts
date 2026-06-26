@@ -172,7 +172,7 @@ export async function getStoriesForTeam(teamId: number) {
       and(eq(teamMembers.userId, users.id), eq(teamMembers.teamId, teamId))
     )
     .where(eq(stories.teamId, teamId))
-    .orderBy(desc(stories.createdAt));
+    .orderBy(stories.createdAt);
 
   return rows;
 }

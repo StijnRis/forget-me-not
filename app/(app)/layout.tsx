@@ -1,10 +1,19 @@
+import { Suspense } from 'react';
 import { requireUser } from '@/lib/auth/require-user';
 
-export default async function AppLayout({
+async function AuthenticatedApp({ children }: { children: React.ReactNode }) {
+  await requireUser();
+  return children;
+}
+
+export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireUser();
-  return <>{children}</>;
+  return (
+    <Suspense fallback={null}>
+      <AuthenticatedApp>{children}</AuthenticatedApp>
+    </Suspense>
+  );
 }

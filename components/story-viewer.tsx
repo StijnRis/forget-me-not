@@ -78,11 +78,12 @@ export function StoryViewer({
     }
   );
   const [activeReminder, setActiveReminder] = useState<Habit | null>(null);
+  const [storyProgress, setStoryProgress] = useState(0);
   const notifiedRef = useRef<Set<string>>(new Set());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { needsGesture, enterFullscreen } = useStoryFullscreen();
 
-  // Stories are newest-first (index 0 = most recent)
+  // Stories are oldest-first (index 0 = story 1, the oldest)
   const index = useMemo(() => {
     if (stories.length === 0) return -1;
     return stories.findIndex((s) => s.id === storyId);
@@ -90,21 +91,42 @@ export function StoryViewer({
 
   const story = index >= 0 ? stories[index] : null;
   const authorName = story ? getDisplayName(story.author) : '';
+  const storyNumber = index >= 0 ? index + 1 : 0;
 
-  const olderStory = index >= 0 && index < stories.length - 1 ? stories[index + 1] : null;
-  const newerStory = index > 0 ? stories[index - 1] : null;
+  const navigateToIndex = useCallback(
+    (targetIndex: number) => {
+      if (stories.length === 0) return;
+      const wrapped =
+        ((targetIndex % stories.length) + stories.length) % stories.length;
+      const target = stories[wrapped];
+      setTransition(targetIndex < index ? 'older' : 'newer');
+      router.push(teamStoryViewPath(teamId, target.id));
+    },
+    [stories, index, router, teamId]
+  );
+
+  const goToPrevious = useCallback(() => {
+    navigateToIndex(index - 1);
+  }, [index, navigateToIndex]);
+
+  const goToNext = useCallback(() => {
+    navigateToIndex(index + 1);
+  }, [index, navigateToIndex]);
+
+  useEffect(() => {
+    setStoryProgress(0);
+  }, [story?.id]);
 
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
-    if (!olderStory) return;
+    if (stories.length <= 1) return;
 
     inactivityTimerRef.current = setTimeout(() => {
-      setTransition('older');
-      router.push(teamStoryViewPath(teamId, olderStory.id));
+      goToNext();
     }, INACTIVITY_MS);
-  }, [olderStory, router, teamId]);
+  }, [goToNext, stories.length]);
 
   useEffect(() => {
     if (!story) return;
@@ -128,11 +150,10 @@ export function StoryViewer({
   }, [story?.id, resetInactivityTimer]);
 
   useEffect(() => {
-    if (initialStories || stories.length === 0) return;
-    if (index === -1) {
-      router.replace(teamStoryViewPath(teamId, stories[0].id));
-    }
-  }, [initialStories, stories, index, router, teamId]);
+    if (stories.length === 0 || index !== -1) return;
+    const randomStory = stories[Math.floor(Math.random() * stories.length)];
+    router.replace(teamStoryViewPath(teamId, randomStory.id));
+  }, [stories, index, router, teamId]);
 
   const checkReminders = useCallback(() => {
     const now = new Date();
@@ -158,20 +179,6 @@ export function StoryViewer({
     () => [...habits].sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime)),
     [habits]
   );
-
-  function goToOlder() {
-    if (olderStory) {
-      setTransition('older');
-      router.push(teamStoryViewPath(teamId, olderStory.id));
-    }
-  }
-
-  function goToNewer() {
-    if (newerStory) {
-      setTransition('newer');
-      router.push(teamStoryViewPath(teamId, newerStory.id));
-    }
-  }
 
   if (stories.length === 0 || !story) {
     return (
@@ -227,7 +234,7 @@ export function StoryViewer({
     );
   }
 
-  const positionFromNewest = index + 1;
+  const progressBarClass = story.imageUrl ? 'bg-white' : 'bg-sky-500';
 
   return (
     <>
@@ -240,7 +247,7 @@ export function StoryViewer({
           Tap anywhere to enter fullscreen
         </button>
       )}
-      <main className="relative min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden">
+      <main className="relative min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden pb-2">
       {previewMode && (
         <div className="relative z-20 bg-sky-100 border-b border-sky-200 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2">
           <Eye className="h-4 w-4" />
@@ -346,6 +353,8 @@ export function StoryViewer({
           storyId={story.id}
           text={story.content}
           onLightBackground={!story.imageUrl}
+          onProgress={setStoryProgress}
+          onComplete={goToNext}
         />
 
         <div className="mt-10 flex items-center justify-between gap-4">
@@ -353,8 +362,7 @@ export function StoryViewer({
             size="lg"
             variant="secondary"
             className="h-14 px-6 rounded-full text-lg"
-            disabled={!olderStory}
-            onClick={goToOlder}
+            onClick={goToPrevious}
           >
             <ChevronLeft className="h-6 w-6 mr-1" />
             Previous
@@ -364,19 +372,32 @@ export function StoryViewer({
               story.imageUrl ? 'text-white/90' : 'text-gray-600'
             }`}
           >
-            {positionFromNewest} of {stories.length}
+            Story {storyNumber} of {stories.length}
           </span>
           <Button
             size="lg"
             variant="secondary"
             className="h-14 px-6 rounded-full text-lg"
-            disabled={!newerStory}
-            onClick={goToNewer}
+            onClick={goToNext}
           >
             Next
             <ChevronRight className="h-6 w-6 ml-1" />
           </Button>
         </div>
+      </div>
+
+      <div
+        className="fixed bottom-0 left-0 right-0 z-30 h-2 bg-black/20"
+        role="progressbar"
+        aria-valuenow={Math.round(storyProgress * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Story reading progress"
+      >
+        <div
+          className={cn('h-full transition-[width] duration-150 ease-linear', progressBarClass)}
+          style={{ width: `${storyProgress * 100}%` }}
+        />
       </div>
     </main>
     </>

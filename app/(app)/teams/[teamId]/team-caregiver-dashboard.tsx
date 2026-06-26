@@ -23,11 +23,7 @@ import {
 import { inviteTeamMember, removeTeamMember } from '@/lib/actions/auth';
 import type { Habit, StoryWithAuthor, Team, TeamMember, User } from '@/lib/db/schema';
 import { TEAM_ROLE_LABELS, TeamRole, isCaregiver } from '@/lib/team-roles';
-import {
-  CAREGIVER_RELATIONSHIP_LABELS,
-  CaregiverRelationship,
-  formatCaregiverRelationship,
-} from '@/lib/caregiver-relationships';
+import { formatCaregiverRelationship } from '@/lib/caregiver-relationships';
 import {
   Bell,
   BookOpen,
@@ -207,19 +203,14 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
               </div>
               <div>
                 <Label htmlFor="relationship">Relationship</Label>
-                <select
+                <Input
                   id="relationship"
                   name="relationship"
                   defaultValue={currentMembership?.relationship ?? ''}
-                  className="mt-1 flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                >
-                  <option value="">Select relationship</option>
-                  {Object.values(CaregiverRelationship).map((value) => (
-                    <option key={value} value={value}>
-                      {CAREGIVER_RELATIONSHIP_LABELS[value]}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="e.g. Daughter, son, friend, neighbour"
+                  maxLength={50}
+                  className="mt-1"
+                />
                 <p className="mt-1 text-xs text-gray-500">
                   How you are related to the person with dementia in this group.
                 </p>

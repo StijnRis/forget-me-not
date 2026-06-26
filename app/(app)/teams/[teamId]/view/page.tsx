@@ -29,7 +29,8 @@ export default async function TeamStoryViewIndexPage({
   ]);
 
   if (stories.length > 0) {
-    redirect(teamStoryViewPath(teamId, stories[0].id));
+    const randomStory = stories[Math.floor(Math.random() * stories.length)];
+    redirect(teamStoryViewPath(teamId, randomStory.id));
   }
 
   return (

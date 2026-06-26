@@ -13,12 +13,16 @@ type SpeakingStoryTextProps = {
   storyId: number;
   text: string;
   onLightBackground?: boolean;
+  onProgress?: (progress: number) => void;
+  onComplete?: () => void;
 };
 
 export function SpeakingStoryText({
   storyId,
   text,
   onLightBackground = true,
+  onProgress,
+  onComplete,
 }: SpeakingStoryTextProps) {
   const [words, setWords] = useState<WordTiming[]>([]);
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
@@ -28,6 +32,19 @@ export function SpeakingStoryText({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const onProgressRef = useRef(onProgress);
+  const onCompleteRef = useRef(onComplete);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+    onCompleteRef.current = onComplete;
+  }, [onProgress, onComplete]);
+
+  useEffect(() => {
+    completedRef.current = false;
+    onProgressRef.current?.(0);
+  }, [storyId, text]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,11 +79,6 @@ export function SpeakingStoryText({
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          console.log('[TTS] client error', {
-            status: response.status,
-            statusText: response.statusText,
-            body: data,
-          });
           throw new Error(
             typeof data.error === 'string'
               ? data.error
@@ -81,10 +93,6 @@ export function SpeakingStoryText({
         setAudioSrc(data.audio);
       } catch (err) {
         if (controller.signal.aborted) return;
-        console.log('[TTS] client exception', {
-          message: err instanceof Error ? err.message : String(err),
-          error: err,
-        });
         setError('Could not read aloud. Showing text only.');
         setWords(fallbackWords(text));
       } finally {
@@ -124,7 +132,19 @@ export function SpeakingStoryText({
     const audio = audioRef.current;
     if (!audio || words.length === 0) return;
 
+    const notifyComplete = () => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      onProgressRef.current?.(1);
+      onCompleteRef.current?.();
+    };
+
     const handleTimeUpdate = () => {
+      const duration = audio.duration;
+      if (duration > 0 && Number.isFinite(duration)) {
+        onProgressRef.current?.(Math.min(audio.currentTime / duration, 1));
+      }
+
       const currentTime = audio.currentTime;
       const index = words.findIndex(
         (w) => currentTime >= w.start && currentTime <= w.end + 0.05
@@ -140,7 +160,10 @@ export function SpeakingStoryText({
       }
     };
 
-    const handleEnded = () => setCurrentWordIndex(null);
+    const handleEnded = () => {
+      setCurrentWordIndex(null);
+      notifyComplete();
+    };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
@@ -150,6 +173,30 @@ export function SpeakingStoryText({
       audio.removeEventListener('ended', handleEnded);
     };
   }, [words, audioSrc]);
+
+  // No audio: advance progress on a gentle read-aloud pace
+  useEffect(() => {
+    if (audioSrc || loading || !text.trim()) return;
+
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    const durationMs = Math.max(wordCount * 400, 8000);
+    const startedAt = Date.now();
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(elapsed / durationMs, 1);
+      onProgressRef.current?.(progress);
+      if (progress >= 1) {
+        clearInterval(interval);
+        if (!completedRef.current) {
+          completedRef.current = true;
+          onCompleteRef.current?.();
+        }
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [audioSrc, loading, storyId, text]);
 
   const displayWords = words.length > 0 ? words : fallbackWords(text);
 
