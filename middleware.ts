@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { signToken, verifyToken } from '@/lib/auth/session';
+import { verifyToken } from '@/lib/auth/session';
 
-const protectedRoutes = ['/dashboard', '/teams', '/my-day', '/caregiver'];
+const protectedRoutes = ['/dashboard', '/teams'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -11,41 +11,26 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  if (isProtectedRoute && !sessionCookie) {
-    return NextResponse.redirect(new URL('/sign-in', request.url));
-  }
-
-  let res = NextResponse.next();
-
-  if (sessionCookie && request.method === 'GET') {
-    try {
-      const parsed = await verifyToken(sessionCookie.value);
-      const expiresInOneDay = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-      res.cookies.set({
-        name: 'session',
-        value: await signToken({
-          ...parsed,
-          expires: expiresInOneDay.toISOString()
-        }),
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        expires: expiresInOneDay
-      });
-    } catch (error) {
-      console.error('Error updating session:', error);
-      res.cookies.delete('session');
-      if (isProtectedRoute) {
-        return NextResponse.redirect(new URL('/sign-in', request.url));
-      }
+  if (!sessionCookie?.value) {
+    if (isProtectedRoute) {
+      return NextResponse.redirect(new URL('/sign-in', request.url));
     }
+    return NextResponse.next();
   }
 
-  return res;
+  try {
+    await verifyToken(sessionCookie.value);
+    return NextResponse.next();
+  } catch (error) {
+    console.error('Invalid session:', error);
+    const response = isProtectedRoute
+      ? NextResponse.redirect(new URL('/sign-in', request.url))
+      : NextResponse.next();
+    response.cookies.delete('session');
+    return response;
+  }
 }
 
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
-  runtime: 'nodejs'
 };

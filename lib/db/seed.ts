@@ -68,6 +68,7 @@ async function seed() {
     teamId: team.id,
     userId: user.id,
     role: 'caregiver',
+    relationship: 'daughter',
   });
 
   await createStripeProducts();

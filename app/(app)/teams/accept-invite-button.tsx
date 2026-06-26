@@ -5,7 +5,7 @@ import { acceptInvitation } from '@/app/(login)/actions';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { ActionState } from '@/lib/auth/middleware';
+import { ActionState } from '@/lib/auth/actions';
 
 export function AcceptInviteButton({ invitationId }: { invitationId: number }) {
   const router = useRouter();

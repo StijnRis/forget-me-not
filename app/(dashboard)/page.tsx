@@ -2,15 +2,19 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
   ArrowRight,
+  BatteryCharging,
   Bell,
   BookOpen,
   Calendar,
   Camera,
   Heart,
   ImageIcon,
+  MapPin,
+  Monitor,
   Sparkles,
   Users,
   Volume2,
+  Wifi,
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -35,12 +39,20 @@ export default function HomePage() {
                 reminders — all through a simple, calming page designed for
                 ease of use.
               </p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 sm:justify-center lg:justify-start">
+              <div className="mt-8 flex flex-col sm:flex-row flex-wrap gap-4 sm:justify-center lg:justify-start">
                 <Button asChild size="lg" className="rounded-full text-lg">
                   <Link href="/sign-up">
                     Get started free
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
+                </Button>
+                <Button
+                  asChild
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full text-lg border-sky-500 text-sky-600 hover:bg-sky-50"
+                >
+                  <Link href="/sign-in">Login</Link>
                 </Button>
                 <Button
                   asChild
@@ -186,6 +198,51 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Caregiver tips */}
+      <section className="py-16 bg-sky-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mx-auto text-center">
+            <p className="text-sm font-semibold uppercase tracking-wide text-sky-600">
+              Practical tips
+            </p>
+            <h2 className="mt-2 text-3xl font-bold text-gray-900 sm:text-4xl">
+              Set up the device for success
+            </h2>
+            <p className="mt-4 text-lg text-gray-600">
+              A few simple habits help your loved one find and use their page
+              every day — without needing to remember how.
+            </p>
+          </div>
+          <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <TipCard
+              icon={<Monitor className="h-6 w-6" />}
+              title="Keep the page open"
+              description="Leave the dementia-friendly view open on the device so your loved one can return to it with a single tap — no searching through apps or menus."
+            />
+            <TipCard
+              icon={<MapPin className="h-6 w-6" />}
+              title="One consistent spot"
+              description="Place the tablet or phone in the same easy-to-find location every day — like the kitchen table or beside their favourite chair."
+            />
+            <TipCard
+              icon={<BatteryCharging className="h-6 w-6" />}
+              title="Stay charged & connected"
+              description="Keep the device plugged in or on a charging stand, and make sure it stays connected to Wi-Fi so stories and reminders arrive on time."
+            />
+            <TipCard
+              icon={<Wifi className="h-6 w-6" />}
+              title="Check the connection"
+              description="A stable internet connection ensures new stories appear and habit reminders play reliably — test it from the same spot where the device lives."
+            />
+            <TipCard
+              icon={<Volume2 className="h-6 w-6" />}
+              title="Comfortable volume & brightness"
+              description="Set the volume loud enough to hear reminders and story narration, and keep the screen brightness comfortable for reading."
+            />
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-16 bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -303,6 +360,26 @@ function FeatureCard({
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-sky-500 text-white">
+        {icon}
+      </div>
+      <h3 className="mt-4 text-lg font-semibold text-gray-900">{title}</h3>
+      <p className="mt-2 text-gray-600 leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
+function TipCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-sky-100 bg-white p-6 shadow-sm">
+      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
         {icon}
       </div>
       <h3 className="mt-4 text-lg font-semibold text-gray-900">{title}</h3>

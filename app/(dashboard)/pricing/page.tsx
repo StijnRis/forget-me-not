@@ -1,12 +1,43 @@
 import { checkoutAction } from '@/lib/payments/actions';
 import { Check } from 'lucide-react';
 import { getStripePrices, getStripeProducts } from '@/lib/payments/stripe';
+import { connection } from 'next/server';
+import { Suspense } from 'react';
 import { SubmitButton } from './submit-button';
 
-// Prices are fresh for one hour max
-export const revalidate = 3600;
+export default function PricingPage() {
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <Suspense fallback={<PricingSkeleton />}>
+        <PricingPlans />
+      </Suspense>
+    </main>
+  );
+}
 
-export default async function PricingPage() {
+function PricingSkeleton() {
+  return (
+    <div className="grid md:grid-cols-2 gap-8 max-w-xl mx-auto">
+      {[0, 1].map((key) => (
+        <div key={key} className="pt-6 space-y-4 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-24" />
+          <div className="h-4 bg-gray-100 rounded w-40" />
+          <div className="h-10 bg-gray-200 rounded w-32" />
+          <div className="space-y-3">
+            <div className="h-4 bg-gray-100 rounded" />
+            <div className="h-4 bg-gray-100 rounded" />
+            <div className="h-4 bg-gray-100 rounded" />
+          </div>
+          <div className="h-10 bg-gray-200 rounded w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function PricingPlans() {
+  await connection();
+
   const [prices, products] = await Promise.all([
     getStripePrices(),
     getStripeProducts(),
@@ -19,34 +50,32 @@ export default async function PricingPage() {
   const plusPrice = prices.find((price) => price.productId === plusPlan?.id);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="grid md:grid-cols-2 gap-8 max-w-xl mx-auto">
-        <PricingCard
-          name={basePlan?.name || 'Base'}
-          price={basePrice?.unitAmount || 800}
-          interval={basePrice?.interval || 'month'}
-          trialDays={basePrice?.trialPeriodDays || 7}
-          features={[
-            'Unlimited Usage',
-            'Unlimited Workspace Members',
-            'Email Support',
-          ]}
-          priceId={basePrice?.id}
-        />
-        <PricingCard
-          name={plusPlan?.name || 'Plus'}
-          price={plusPrice?.unitAmount || 1200}
-          interval={plusPrice?.interval || 'month'}
-          trialDays={plusPrice?.trialPeriodDays || 7}
-          features={[
-            'Everything in Base, and:',
-            'Early Access to New Features',
-            '24/7 Support + Slack Access',
-          ]}
-          priceId={plusPrice?.id}
-        />
-      </div>
-    </main>
+    <div className="grid md:grid-cols-2 gap-8 max-w-xl mx-auto">
+      <PricingCard
+        name={basePlan?.name || 'Base'}
+        price={basePrice?.unitAmount || 800}
+        interval={basePrice?.interval || 'month'}
+        trialDays={basePrice?.trialPeriodDays || 7}
+        features={[
+          'Unlimited stories & reminders',
+          'Up to 5 family members',
+          'Email support',
+        ]}
+        priceId={basePrice?.id}
+      />
+      <PricingCard
+        name={plusPlan?.name || 'Plus'}
+        price={plusPrice?.unitAmount || 1200}
+        interval={plusPrice?.interval || 'month'}
+        trialDays={plusPrice?.trialPeriodDays || 7}
+        features={[
+          'Everything in Base, and:',
+          'Unlimited family members',
+          'Priority support',
+        ]}
+        priceId={plusPrice?.id}
+      />
+    </div>
   );
 }
 
@@ -74,7 +103,7 @@ function PricingCard({
       <p className="text-4xl font-medium text-gray-900 mb-6">
         ${price / 100}{' '}
         <span className="text-xl font-normal text-gray-600">
-          per user / {interval}
+          per family / {interval}
         </span>
       </p>
       <ul className="space-y-4 mb-8">

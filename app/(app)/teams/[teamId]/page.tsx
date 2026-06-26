@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { getUser } from '@/lib/db/queries';
-import { assertCanAccessCaregiverPage } from '@/lib/team-access';
+import { requireCaregiverOnTeam } from '@/lib/team-access';
 import { TeamCaregiverDashboard } from './team-caregiver-dashboard';
 
 export default async function TeamCaregiverPage({
@@ -19,7 +19,7 @@ export default async function TeamCaregiverPage({
     notFound();
   }
 
-  const { error } = await assertCanAccessCaregiverPage(user.id, teamId);
+  const { error } = await requireCaregiverOnTeam(user.id, teamId);
   if (error) {
     redirect(`/teams/${teamId}/view`);
   }

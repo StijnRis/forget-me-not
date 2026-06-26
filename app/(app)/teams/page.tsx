@@ -1,7 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getPendingInvitationsForUser, getTeamsForUser, getUser } from '@/lib/db/queries';
-import { Button } from '@/components/ui/button';
+import { getPendingInvitationsForUser, getTeamsForUser, getUser } from '@/lib/db/queries';import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TEAM_ROLE_LABELS, TeamRole, isCaregiver } from '@/lib/team-roles';
 import { AcceptInviteButton } from './accept-invite-button';
@@ -10,13 +8,9 @@ import { Users, Mail, Plus } from 'lucide-react';
 
 export default async function TeamsOverviewPage() {
   const user = await getUser();
-  if (!user) {
-    redirect('/sign-in');
-  }
-
   const [memberships, invitations] = await Promise.all([
-    getTeamsForUser(user.id),
-    getPendingInvitationsForUser(user.email),
+    getTeamsForUser(user!.id),
+    getPendingInvitationsForUser(user!.email),
   ]);
 
   return (

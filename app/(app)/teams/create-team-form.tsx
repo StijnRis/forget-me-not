@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
-import { ActionState } from '@/lib/auth/middleware';
+import { ActionState } from '@/lib/auth/actions';
 import { createTeam } from '@/app/(login)/actions';
 
 export function CreateTeamForm() {

@@ -7,8 +7,7 @@ import { customerPortalAction } from '@/lib/payments/actions';
 import useSWR from 'swr';
 import { Suspense } from 'react';
 import type { Team } from '@/lib/db/schema';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { fetcher } from '@/lib/fetcher';
 
 type TeamListItem = {
   id: number;

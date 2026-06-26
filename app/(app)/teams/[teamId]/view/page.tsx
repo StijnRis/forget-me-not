@@ -1,35 +1,22 @@
-import { notFound, redirect } from 'next/navigation';
-import { getUser } from '@/lib/db/queries';
-import { getMembershipForTeam } from '@/lib/team-access';
-import { isCaregiver } from '@/lib/team-roles';
-import { StoryViewer } from '@/components/story-viewer';
+import { redirect } from 'next/navigation';
+import { getStoriesForTeam } from '@/lib/db/queries';
+import { teamStoryViewPath } from '@/lib/story-routes';
 
-export default async function TeamStoryViewPage({
+export default async function TeamStoryViewIndexPage({
   params,
 }: {
   params: Promise<{ teamId: string }>;
 }) {
-  const user = await getUser();
-  if (!user) {
-    redirect('/sign-in');
-  }
-
   const { teamId: teamIdStr } = await params;
   const teamId = parseInt(teamIdStr, 10);
   if (Number.isNaN(teamId)) {
-    notFound();
-  }
-
-  const membership = await getMembershipForTeam(user.id, teamId);
-  if (!membership) {
     redirect('/teams');
   }
 
-  return (
-    <StoryViewer
-      teamId={teamId}
-      teamName={membership.team.name}
-      previewMode={isCaregiver(membership.role)}
-    />
-  );
+  const stories = await getStoriesForTeam(teamId);
+  if (stories.length > 0) {
+    redirect(teamStoryViewPath(teamId, stories[0].id));
+  }
+
+  return null;
 }

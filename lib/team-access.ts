@@ -37,10 +37,6 @@ export async function canViewTeamStories(userId: number, teamId: number) {
   return { allowed: true as const, membership };
 }
 
-export async function assertCanAccessCaregiverPage(userId: number, teamId: number) {
-  return requireCaregiverOnTeam(userId, teamId);
-}
-
 export async function validatePersonWithDementiaSlot(teamId: number) {
   const existing = await db
     .select()

@@ -1,26 +1,22 @@
-import { getTeamWithMembers, getUser } from '@/lib/db/queries';
-import { getMembershipForTeam } from '@/lib/team-access';
+import { getTeamWithMembers } from '@/lib/db/queries';
+import { requireTeamMemberFromRequest } from '@/lib/api/team-handler';
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ teamId: string }> }
 ) {
-  const user = await getUser();
-  if (!user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const { teamId: teamIdStr } = await params;
-  const teamId = parseInt(teamIdStr, 10);
-  if (Number.isNaN(teamId)) {
-    return Response.json({ error: 'Invalid team' }, { status: 400 });
+  const access = await requireTeamMemberFromRequest(teamIdStr);
+  if ('error' in access) {
+    return access.error;
   }
 
-  const membership = await getMembershipForTeam(user.id, teamId);
-  if (!membership) {
-    return Response.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const team = await getTeamWithMembers(teamId);
-  return Response.json({ team, membership: { role: membership.role } });
+  const team = await getTeamWithMembers(access.teamId);
+  return Response.json({
+    team,
+    membership: {
+      role: access.membership.role,
+      relationship: access.membership.relationship,
+    },
+  });
 }

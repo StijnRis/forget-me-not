@@ -1,8 +1,11 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import { Manrope } from 'next/font/google';
 import { getUser, getTeamsForUser } from '@/lib/db/queries';
 import { SWRConfig } from 'swr';
+import { NavbarGate } from '@/components/navbar-gate';
+import { NavbarFallback } from '@/components/navbar-fallback';
 
 export const metadata: Metadata = {
   title: 'Forget Me Not — Stay connected through dementia',
@@ -37,6 +40,9 @@ export default function RootLayout({
             }
           }}
         >
+          <Suspense fallback={<NavbarFallback />}>
+            <NavbarGate />
+          </Suspense>
           {children}
         </SWRConfig>
       </body>

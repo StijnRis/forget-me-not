@@ -23,9 +23,9 @@ import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
   validatedActionWithUser,
-} from '@/lib/auth/middleware';
+} from '@/lib/auth/actions';
 import { logActivity } from '@/lib/activity';
-import { getHomePathForRole, isCaregiver, TeamRole } from '@/lib/team-roles';
+import { isCaregiver, TeamRole } from '@/lib/team-roles';
 import {
   acceptInvitationForUser,
   getMembershipForTeam,
@@ -92,7 +92,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     return createCheckoutSession({ team, priceId });
   }
 
-  redirect(getHomePathForRole());
+  redirect('/teams');
 });
 
 const signUpSchema = z.object({
@@ -171,7 +171,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     return createCheckoutSession({ team: createdTeam, priceId });
   }
 
-  redirect(getHomePathForRole());
+  redirect('/teams');
 });
 
 export async function signOut() {

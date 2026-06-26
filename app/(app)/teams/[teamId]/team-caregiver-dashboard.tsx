@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,12 @@ import {
 } from '@/app/(app)/actions';
 import { inviteTeamMember, removeTeamMember } from '@/app/(login)/actions';
 import type { Habit, StoryWithAuthor, Team, TeamMember, User } from '@/lib/db/schema';
-import { TEAM_ROLE_LABELS, TeamRole } from '@/lib/team-roles';
+import { TEAM_ROLE_LABELS, TeamRole, isCaregiver } from '@/lib/team-roles';
+import {
+  CAREGIVER_RELATIONSHIP_LABELS,
+  CaregiverRelationship,
+  formatCaregiverRelationship,
+} from '@/lib/caregiver-relationships';
 import {
   Bell,
   BookOpen,
@@ -35,9 +40,10 @@ import {
   Users,
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { fetcher } from '@/lib/fetcher';
+import { getDisplayName, getInitials } from '@/lib/user-display';
 
 type ActionState = { error?: string; success?: string; inviteLink?: string };
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 type TeamResponse = {
   team: Team & {
@@ -45,21 +51,8 @@ type TeamResponse = {
       user: Pick<User, 'id' | 'name' | 'email' | 'profileImageUrl'>;
     })[];
   };
-  membership: { role: string };
+  membership: { role: string; relationship: string | null };
 };
-
-function getDisplayName(user: Pick<User, 'name' | 'email'>) {
-  return user.name || user.email.split('@')[0];
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 function formatRole(role: string) {
   return TEAM_ROLE_LABELS[role as TeamRole] ?? role.replace(/_/g, ' ');
@@ -83,6 +76,13 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
 
   const teamName = teamData?.team.name ?? 'Family group';
   const members = teamData?.team.teamMembers ?? [];
+  const currentMembership =
+    members.find((member) => member.user.id === user?.id) ??
+    (teamData?.membership
+      ? {
+          relationship: teamData.membership.relationship,
+        }
+      : undefined);
 
   const [storyState, storyAction, storyPending] = useActionState<ActionState, FormData>(
     createStory,
@@ -104,8 +104,35 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
     removeTeamMember,
     {}
   );
-  const [, deleteStoryAction] = useActionState<ActionState, FormData>(deleteStory, {});
-  const [, deleteHabitAction] = useActionState<ActionState, FormData>(deleteHabit, {});
+  const [deleteStoryState, deleteStoryAction] = useActionState<ActionState, FormData>(deleteStory, {});
+  const [deleteHabitState, deleteHabitAction] = useActionState<ActionState, FormData>(deleteHabit, {});
+
+  useEffect(() => {
+    if (storyState?.success) void mutateStories();
+  }, [storyState?.success, mutateStories]);
+
+  useEffect(() => {
+    if (habitState?.success) void mutateHabits();
+  }, [habitState?.success, mutateHabits]);
+
+  useEffect(() => {
+    if (deleteStoryState?.success) void mutateStories();
+  }, [deleteStoryState?.success, mutateStories]);
+
+  useEffect(() => {
+    if (deleteHabitState?.success) void mutateHabits();
+  }, [deleteHabitState?.success, mutateHabits]);
+
+  useEffect(() => {
+    if (profileState?.success) {
+      void mutateUser();
+      void mutateTeam();
+    }
+  }, [profileState?.success, mutateUser, mutateTeam]);
+
+  useEffect(() => {
+    if (inviteState?.success || removeState?.success) void mutateTeam();
+  }, [inviteState?.success, removeState?.success, mutateTeam]);
 
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -142,6 +169,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
         </CardHeader>
         <CardContent>
           <form action={profileAction} className="space-y-4">
+            <input type="hidden" name="teamId" value={teamId} />
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
                 <AvatarImage
@@ -177,6 +205,25 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                   className="mt-1"
                 />
               </div>
+              <div>
+                <Label htmlFor="relationship">Relationship</Label>
+                <select
+                  id="relationship"
+                  name="relationship"
+                  defaultValue={currentMembership?.relationship ?? ''}
+                  className="mt-1 flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                >
+                  <option value="">Select relationship</option>
+                  {Object.values(CaregiverRelationship).map((value) => (
+                    <option key={value} value={value}>
+                      {CAREGIVER_RELATIONSHIP_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  How you are related to the person with dementia in this group.
+                </p>
+              </div>
             </div>
             {profileState?.error && (
               <p className="text-red-500 text-sm">{profileState.error}</p>
@@ -184,11 +231,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
             {profileState?.success && (
               <p className="text-green-600 text-sm">{profileState.success}</p>
             )}
-            <Button
-              type="submit"
-              disabled={profilePending}
-              onClick={() => setTimeout(() => mutateUser(), 500)}
-            >
+            <Button type="submit" disabled={profilePending}>
               {profilePending ? 'Saving...' : 'Save profile'}
             </Button>
           </form>
@@ -221,7 +264,12 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                   </Avatar>
                   <div>
                     <p className="font-medium">{getDisplayName(member.user)}</p>
-                    <p className="text-sm text-gray-500">{formatRole(member.role)}</p>
+                    <p className="text-sm text-gray-500">
+                      {formatRole(member.role)}
+                      {isCaregiver(member.role) &&
+                        member.relationship &&
+                        ` · ${formatCaregiverRelationship(member.relationship)}`}
+                    </p>
                   </div>
                 </div>
                 {member.user.id !== user?.id && (
@@ -233,7 +281,6 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                       variant="ghost"
                       size="sm"
                       disabled={removePending}
-                      onClick={() => setTimeout(() => mutateTeam(), 500)}
                     >
                       Remove
                     </Button>
@@ -344,11 +391,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
             {storyState?.success && (
               <p className="text-green-600 text-sm">{storyState.success}</p>
             )}
-            <Button
-              type="submit"
-              disabled={storyPending}
-              onClick={() => setTimeout(() => mutateStories(), 500)}
-            >
+            <Button type="submit" disabled={storyPending}>
               Add story
             </Button>
           </form>
@@ -371,12 +414,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                 <form action={deleteStoryAction}>
                   <input type="hidden" name="teamId" value={teamId} />
                   <input type="hidden" name="storyId" value={story.id} />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setTimeout(() => mutateStories(), 500)}
-                  >
+                  <Button type="submit" variant="ghost" size="icon">
                     <Trash2 className="h-4 w-4 text-gray-400" />
                   </Button>
                 </form>
@@ -422,11 +460,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
             {habitState?.success && (
               <p className="text-green-600 text-sm">{habitState.success}</p>
             )}
-            <Button
-              type="submit"
-              disabled={habitPending}
-              onClick={() => setTimeout(() => mutateHabits(), 500)}
-            >
+            <Button type="submit" disabled={habitPending}>
               Add reminder
             </Button>
           </form>
@@ -445,12 +479,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                 <form action={deleteHabitAction}>
                   <input type="hidden" name="teamId" value={teamId} />
                   <input type="hidden" name="habitId" value={habit.id} />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setTimeout(() => mutateHabits(), 500)}
-                  >
+                  <Button type="submit" variant="ghost" size="icon">
                     <Trash2 className="h-4 w-4 text-gray-400" />
                   </Button>
                 </form>

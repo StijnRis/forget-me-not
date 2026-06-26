@@ -8,7 +8,7 @@ import {
 } from '@/lib/db/queries';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-04-30.basil'
+  apiVersion: '2026-06-24.dahlia'
 });
 
 export async function createCheckoutSession({
@@ -37,6 +37,9 @@ export async function createCheckoutSession({
     cancel_url: `${process.env.BASE_URL}/pricing`,
     customer: team.stripeCustomerId || undefined,
     client_reference_id: user.id.toString(),
+    metadata: {
+      teamId: team.id.toString(),
+    },
     allow_promotion_codes: true,
     subscription_data: {
       trial_period_days: 14

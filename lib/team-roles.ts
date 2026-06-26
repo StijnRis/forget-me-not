@@ -17,7 +17,3 @@ export function isCaregiver(role: string | null | undefined): boolean {
 export function isPersonWithDementia(role: string | null | undefined): boolean {
   return role === TeamRole.PERSON_WITH_DEMENTIA;
 }
-
-export function getHomePathForRole(_role?: string | null): string {
-  return '/teams';
-}

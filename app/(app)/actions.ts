@@ -8,12 +8,14 @@ import {
   ActivityType,
   habits,
   stories,
+  teamMembers,
   users,
 } from '@/lib/db/schema';
-import { validatedActionWithUser } from '@/lib/auth/middleware';
+import { validatedActionWithUser } from '@/lib/auth/actions';
 import { getUserWithTeam } from '@/lib/db/queries';
 import { requireCaregiverOnTeam } from '@/lib/team-access';
 import { logActivity } from '@/lib/activity';
+import { CAREGIVER_RELATIONSHIP_VALUES } from '@/lib/caregiver-relationships';
 
 function teamPaths(teamId: number) {
   return [`/teams/${teamId}`, `/teams/${teamId}/view`, '/teams'];
@@ -122,17 +124,26 @@ export const deleteHabit = validatedActionWithUser(
 );
 
 const updateProfileSchema = z.object({
+  teamId: z.coerce.number(),
   name: z.string().min(1, 'Name is required').max(100),
   profileImageUrl: z
     .string()
     .optional()
     .transform((v) => (v === '' ? undefined : v))
     .pipe(z.string().url().optional()),
+  relationship: z
+    .string()
+    .optional()
+    .transform((v) => (v === '' ? undefined : v))
+    .pipe(z.enum(CAREGIVER_RELATIONSHIP_VALUES).optional()),
 });
 
 export const updateProfile = validatedActionWithUser(
   updateProfileSchema,
   async (data, _, user) => {
+    const { error } = await requireCaregiverOnTeam(user.id, data.teamId);
+    if (error) return { error };
+
     const userWithTeam = await getUserWithTeam(user.id);
 
     await db
@@ -144,12 +155,24 @@ export const updateProfile = validatedActionWithUser(
       })
       .where(eq(users.id, user.id));
 
+    await db
+      .update(teamMembers)
+      .set({ relationship: data.relationship ?? null })
+      .where(
+        and(
+          eq(teamMembers.userId, user.id),
+          eq(teamMembers.teamId, data.teamId)
+        )
+      );
+
     if (userWithTeam?.teamId) {
       await logActivity(userWithTeam.teamId, user.id, ActivityType.UPDATE_PROFILE);
     }
 
     revalidatePath('/teams');
     revalidatePath('/dashboard');
+    revalidatePath(`/teams/${data.teamId}`);
+    revalidatePath(`/teams/${data.teamId}/view`);
     return { success: 'Profile updated.' };
   }
 );

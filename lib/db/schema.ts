@@ -41,6 +41,7 @@ export const teamMembers = pgTable('team_members', {
     .notNull()
     .references(() => teams.id),
   role: varchar('role', { length: 50 }).notNull(),
+  relationship: varchar('relationship', { length: 50 }),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
 
@@ -187,7 +188,9 @@ export type TeamDataWithMembers = Team & {
 };
 
 export type StoryWithAuthor = Story & {
-  author: Pick<User, 'id' | 'name' | 'email' | 'profileImageUrl'>;
+  author: Pick<User, 'id' | 'name' | 'email' | 'profileImageUrl'> & {
+    relationship?: string | null;
+  };
 };
 
 export enum ActivityType {

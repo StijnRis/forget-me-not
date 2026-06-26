@@ -122,17 +122,6 @@ export async function getTeamsForUser(userId?: number) {
   });
 }
 
-/** @deprecated Use getTeamsForUser or getTeamWithMembers(teamId) */
-export async function getTeamForUser() {
-  const memberships = await getTeamsForUser();
-  if (memberships.length === 0) {
-    return null;
-  }
-
-  const teamId = memberships[0].teamId;
-  return getTeamWithMembers(teamId);
-}
-
 export async function getTeamWithMembers(teamId: number) {
   return db.query.teams.findFirst({
     where: eq(teams.id, teamId),
@@ -167,20 +156,33 @@ export async function getPendingInvitationsForUser(email: string) {
 }
 
 export async function getStoriesForTeam(teamId: number) {
-  return db.query.stories.findMany({
-    where: eq(stories.teamId, teamId),
-    orderBy: desc(stories.createdAt),
-    with: {
+  const rows = await db
+    .select({
+      id: stories.id,
+      teamId: stories.teamId,
+      authorId: stories.authorId,
+      title: stories.title,
+      content: stories.content,
+      imageUrl: stories.imageUrl,
+      createdAt: stories.createdAt,
       author: {
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-          profileImageUrl: true,
-        },
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        profileImageUrl: users.profileImageUrl,
+        relationship: teamMembers.relationship,
       },
-    },
-  });
+    })
+    .from(stories)
+    .innerJoin(users, eq(stories.authorId, users.id))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.userId, users.id), eq(teamMembers.teamId, teamId))
+    )
+    .where(eq(stories.teamId, teamId))
+    .orderBy(desc(stories.createdAt));
+
+  return rows;
 }
 
 export async function getHabitsForTeam(teamId: number) {
