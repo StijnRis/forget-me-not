@@ -15,27 +15,37 @@ import { useStoryFullscreen } from '@/hooks/use-story-fullscreen';
 import { cn } from '@/lib/utils';
 import { fetcher } from '@/lib/fetcher';
 import { getDisplayName, getInitials } from '@/lib/user-display';
+import { playReminderSound, primeReminderAudio } from '@/lib/reminder-sound';
 
 const INACTIVITY_MS = 15 * 60 * 1000;
+const AUTO_ADVANCE_DELAY_MS = 10_000;
 
-function playReminderSound() {
-  const context = new AudioContext();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-
-  oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(523.25, context.currentTime);
-  oscillator.frequency.setValueAtTime(659.25, context.currentTime + 0.15);
-  oscillator.frequency.setValueAtTime(783.99, context.currentTime + 0.3);
-
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.3, context.currentTime + 0.05);
-  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.8);
-
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.85);
+function ReminderBanner({
+  reminder,
+  onDismiss,
+}: {
+  reminder: Habit;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="relative z-20 mx-4 mt-4 rounded-2xl bg-amber-400 px-6 py-5 shadow-lg animate-pulse">
+      <div className="flex items-center gap-4">
+        <Bell className="h-8 w-8 text-amber-900 shrink-0" />
+        <div>
+          <p className="text-lg font-bold text-amber-950">Reminder</p>
+          <p className="text-2xl font-semibold text-amber-950">{reminder.title}</p>
+        </div>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="ml-auto rounded-full"
+          onClick={onDismiss}
+        >
+          OK
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 type StoryViewerProps = {
@@ -81,6 +91,7 @@ export function StoryViewer({
   const [storyProgress, setStoryProgress] = useState(0);
   const notifiedRef = useRef<Set<string>>(new Set());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { needsGesture, enterFullscreen } = useStoryFullscreen();
 
   // Stories are oldest-first (index 0 = story 1, the oldest)
@@ -115,7 +126,47 @@ export function StoryViewer({
 
   useEffect(() => {
     setStoryProgress(0);
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
   }, [story?.id]);
+
+  const logStoryView = useCallback(
+    async (viewedStoryId: number) => {
+      if (previewMode) return;
+      try {
+        await fetch(`/api/teams/${teamId}/stories/${viewedStoryId}/view`, {
+          method: 'POST',
+        });
+      } catch {
+        // Non-blocking
+      }
+    },
+    [previewMode, teamId]
+  );
+
+  const handleStoryComplete = useCallback(() => {
+    if (!story) return;
+
+    void logStoryView(story.id);
+
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+    }
+
+    advanceTimerRef.current = setTimeout(() => {
+      goToNext();
+    }, AUTO_ADVANCE_DELAY_MS);
+  }, [story, logStoryView, goToNext]);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimerRef.current) {
@@ -164,14 +215,27 @@ export function StoryViewer({
       if (habit.scheduledTime === current && !notifiedRef.current.has(key)) {
         notifiedRef.current.add(key);
         setActiveReminder(habit);
-        playReminderSound();
+        void playReminderSound();
       }
     }
   }, [habits]);
 
   useEffect(() => {
+    const prime = () => primeReminderAudio();
+    const events = ['click', 'touchstart', 'keydown'] as const;
+    for (const event of events) {
+      window.addEventListener(event, prime, { once: true, passive: true });
+    }
+    return () => {
+      for (const event of events) {
+        window.removeEventListener(event, prime);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     checkReminders();
-    const interval = setInterval(checkReminders, 30_000);
+    const interval = setInterval(checkReminders, 1_000);
     return () => clearInterval(interval);
   }, [checkReminders]);
 
@@ -192,7 +256,14 @@ export function StoryViewer({
             Tap anywhere to enter fullscreen
           </button>
         )}
-        <main className="relative flex min-h-[100dvh] items-center justify-center bg-sky-50 px-6">
+        <main className="relative flex min-h-[100dvh] flex-col bg-sky-50 px-6">
+          {activeReminder && (
+            <ReminderBanner
+              reminder={activeReminder}
+              onDismiss={() => setActiveReminder(null)}
+            />
+          )}
+          <div className="flex flex-1 items-center justify-center">
           {previewMode && (
             <div className="absolute top-0 left-0 right-0 bg-sky-100 border-b border-sky-200 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2">
             <Eye className="h-4 w-4" />
@@ -228,6 +299,7 @@ export function StoryViewer({
               <Link href={`/teams/${teamId}`}>Back to caregiver page</Link>
             </Button>
           )}
+        </div>
         </div>
       </main>
       </>
@@ -274,25 +346,10 @@ export function StoryViewer({
       />
 
       {activeReminder && (
-        <div className="relative z-20 mx-4 mt-4 rounded-2xl bg-amber-400 px-6 py-5 shadow-lg animate-pulse">
-          <div className="flex items-center gap-4">
-            <Bell className="h-8 w-8 text-amber-900 shrink-0" />
-            <div>
-              <p className="text-lg font-bold text-amber-950">Reminder</p>
-              <p className="text-2xl font-semibold text-amber-950">
-                {activeReminder.title}
-              </p>
-            </div>
-            <Button
-              size="lg"
-              variant="secondary"
-              className="ml-auto rounded-full"
-              onClick={() => setActiveReminder(null)}
-            >
-              OK
-            </Button>
-          </div>
-        </div>
+        <ReminderBanner
+          reminder={activeReminder}
+          onDismiss={() => setActiveReminder(null)}
+        />
       )}
 
       <div
@@ -354,7 +411,7 @@ export function StoryViewer({
           text={story.content}
           onLightBackground={!story.imageUrl}
           onProgress={setStoryProgress}
-          onComplete={goToNext}
+          onComplete={handleStoryComplete}
         />
 
         <div className="mt-10 flex items-center justify-between gap-4">

@@ -32,6 +32,7 @@ import {
   requireCaregiverOnTeam,
   validatePersonWithDementiaSlot,
 } from '@/lib/team-access';
+import { sendInvitationEmail } from '@/lib/email';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -441,14 +442,34 @@ export const inviteTeamMember = validatedActionWithUser(
       .returning();
 
     await logActivity(teamId, user.id, ActivityType.INVITE_TEAM_MEMBER);
-    revalidatePath('/teams');
-    revalidatePath(`/teams/${teamId}`);
+
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
+    });
 
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     const inviteLink = `${baseUrl}/sign-up?inviteId=${invitation.id}`;
+    const signInLink = `${baseUrl}/sign-in`;
+
+    const emailResult = await sendInvitationEmail({
+      to: email,
+      teamName: team?.name ?? 'your family group',
+      inviterName: user.name || user.email.split('@')[0],
+      role,
+      inviteLink,
+      signInLink,
+    });
+
+    if (!emailResult.ok) {
+      await db.delete(invitations).where(eq(invitations.id, invitation.id));
+      return { error: emailResult.error };
+    }
+
+    revalidatePath('/teams');
+    revalidatePath(`/teams/${teamId}`);
 
     return {
-      success: `Invitation sent. New members can sign up with: ${inviteLink}. Existing users will see it on their teams page.`,
+      success: `Invitation email sent to ${email}.`,
       inviteLink,
     };
   }

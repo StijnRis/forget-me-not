@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ import { formatCaregiverRelationship } from '@/lib/caregiver-relationships';
 import {
   Bell,
   BookOpen,
+  Check,
   Clock,
   Eye,
   Loader2,
@@ -34,6 +35,7 @@ import {
   UserCircle,
   UserPlus,
   Users,
+  X,
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { fetcher } from '@/lib/fetcher';
@@ -49,6 +51,39 @@ type TeamResponse = {
   };
   membership: { role: string; relationship: string | null };
 };
+
+type EngagementResponse = {
+  viewers: Array<{
+    userId: number;
+    name: string;
+    lastActiveAt: string | null;
+    watchedStoryIds: number[];
+  }>;
+  stories: Array<{
+    id: number;
+    title: string | null;
+    content: string;
+  }>;
+};
+
+function formatLastActive(dateStr: string | null) {
+  if (!dateStr) return 'Not watched yet';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+}
+
+function storyLabel(story: { title: string | null; content: string }, index: number) {
+  if (story.title?.trim()) return story.title;
+  const preview = story.content.trim().slice(0, 24);
+  return preview.length < story.content.trim().length ? `${preview}…` : preview || `Story ${index + 1}`;
+}
 
 function formatRole(role: string) {
   return TEAM_ROLE_LABELS[role as TeamRole] ?? role.replace(/_/g, ' ');
@@ -69,16 +104,18 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
     fetcher
   );
   const { data: user, mutate: mutateUser } = useSWR<User>('/api/user', fetcher);
+  const { data: engagement } = useSWR<EngagementResponse>(
+    `${apiBase}/engagement`,
+    fetcher,
+    { refreshInterval: 30_000 }
+  );
 
   const teamName = teamData?.team.name ?? 'Family group';
   const members = teamData?.team.teamMembers ?? [];
-  const currentMembership =
-    members.find((member) => member.user.id === user?.id) ??
-    (teamData?.membership
-      ? {
-          relationship: teamData.membership.relationship,
-        }
-      : undefined);
+  const membershipRelationship =
+    teamData?.membership.relationship ??
+    members.find((member) => member.user.id === user?.id)?.relationship ??
+    '';
 
   const [storyState, storyAction, storyPending] = useActionState<ActionState, FormData>(
     createStory,
@@ -102,6 +139,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
   );
   const [deleteStoryState, deleteStoryAction] = useActionState<ActionState, FormData>(deleteStory, {});
   const [deleteHabitState, deleteHabitAction] = useActionState<ActionState, FormData>(deleteHabit, {});
+  const [profileFormKey, setProfileFormKey] = useState(0);
 
   useEffect(() => {
     if (storyState?.success) void mutateStories();
@@ -120,10 +158,13 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
   }, [deleteHabitState?.success, mutateHabits]);
 
   useEffect(() => {
-    if (profileState?.success) {
-      void mutateUser();
-      void mutateTeam();
-    }
+    if (!profileState?.success) return;
+
+    void (async () => {
+      await Promise.all([mutateUser(), mutateTeam()]);
+      // Remount form so fields reflect saved values (React resets forms after actions).
+      setProfileFormKey((key) => key + 1);
+    })();
   }, [profileState?.success, mutateUser, mutateTeam]);
 
   useEffect(() => {
@@ -159,12 +200,100 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5 text-sky-600" />
+            Story watching activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-sm text-gray-600">
+            See whether the person with dementia has finished listening to each story.
+            A check appears after they hear a story all the way through.
+          </p>
+
+          {!engagement ? (
+            <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
+          ) : engagement.viewers.length === 0 ? (
+            <p className="text-sm text-gray-500 rounded-lg border border-dashed p-4">
+              No person with dementia profile in this group yet. Invite someone with
+              that role to track story watching here.
+            </p>
+          ) : engagement.stories.length === 0 ? (
+            <p className="text-sm text-gray-500 rounded-lg border border-dashed p-4">
+              Add stories first — watching activity will appear here once they listen.
+            </p>
+          ) : (
+            engagement.viewers.map((viewer) => {
+              const watchedSet = new Set(viewer.watchedStoryIds);
+              const watchedCount = engagement.stories.filter((s) =>
+                watchedSet.has(s.id)
+              ).length;
+
+              return (
+                <div key={viewer.userId} className="rounded-xl border bg-gray-50 p-4 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-gray-900">{viewer.name}</p>
+                      <p className="text-sm text-gray-500">
+                        Person with dementia · {watchedCount} of {engagement.stories.length}{' '}
+                        stories watched
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-500 flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      Last active: {formatLastActive(viewer.lastActiveAt)}
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b">
+                          <th className="pb-2 pr-4 font-medium">Story</th>
+                          <th className="pb-2 font-medium text-center w-24">Watched</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {engagement.stories.map((story, index) => {
+                          const watched = watchedSet.has(story.id);
+                          return (
+                            <tr key={story.id} className="border-b border-gray-100 last:border-0">
+                              <td className="py-2.5 pr-4 text-gray-800">
+                                <span className="text-gray-400 mr-2">{index + 1}.</span>
+                                {storyLabel(story, index)}
+                              </td>
+                              <td className="py-2.5 text-center">
+                                {watched ? (
+                                  <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-green-100 text-green-700">
+                                    <Check className="h-4 w-4" />
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-gray-200 text-gray-500">
+                                    <X className="h-4 w-4" />
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
             <UserCircle className="h-5 w-5 text-sky-600" />
             Your profile
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={profileAction} className="space-y-4">
+          <form key={profileFormKey} action={profileAction} className="space-y-4">
             <input type="hidden" name="teamId" value={teamId} />
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
@@ -206,7 +335,7 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
                 <Input
                   id="relationship"
                   name="relationship"
-                  defaultValue={currentMembership?.relationship ?? ''}
+                  defaultValue={membershipRelationship}
                   placeholder="e.g. Daughter, son, friend, neighbour"
                   maxLength={50}
                   className="mt-1"

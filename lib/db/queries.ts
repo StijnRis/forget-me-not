@@ -1,7 +1,8 @@
-import { desc, and, eq, isNull } from 'drizzle-orm';
+import { desc, and, eq, isNull, like } from 'drizzle-orm';
 import { db } from './drizzle';
 import {
   activityLogs,
+  ActivityType,
   habits,
   invitations,
   stories,
@@ -182,4 +183,73 @@ export async function getHabitsForTeam(teamId: number) {
     where: eq(habits.teamId, teamId),
     orderBy: habits.scheduledTime,
   });
+}
+
+export type StoryEngagementViewer = {
+  userId: number;
+  name: string;
+  lastActiveAt: Date | null;
+  watchedStoryIds: number[];
+};
+
+export async function getStoryEngagementForTeam(teamId: number) {
+  const { parseViewStoryId } = await import('@/lib/activity');
+  const { TeamRole } = await import('@/lib/team-roles');
+
+  const viewers = await db.query.teamMembers.findMany({
+    where: and(
+      eq(teamMembers.teamId, teamId),
+      eq(teamMembers.role, TeamRole.PERSON_WITH_DEMENTIA)
+    ),
+    with: {
+      user: {
+        columns: { id: true, name: true, email: true },
+      },
+    },
+  });
+
+  const stories = await getStoriesForTeam(teamId);
+
+  const viewLogs = await db
+    .select({
+      userId: activityLogs.userId,
+      action: activityLogs.action,
+      timestamp: activityLogs.timestamp,
+    })
+    .from(activityLogs)
+    .where(
+      and(
+        eq(activityLogs.teamId, teamId),
+        like(activityLogs.action, `${ActivityType.VIEW_STORY}:%`)
+      )
+    )
+    .orderBy(desc(activityLogs.timestamp));
+
+  const watchedByUser = new Map<number, Set<number>>();
+  const lastActiveByUser = new Map<number, Date>();
+
+  for (const log of viewLogs) {
+    if (!log.userId) continue;
+    const storyId = parseViewStoryId(log.action);
+    if (storyId === null) continue;
+
+    if (!watchedByUser.has(log.userId)) {
+      watchedByUser.set(log.userId, new Set());
+    }
+    watchedByUser.get(log.userId)!.add(storyId);
+
+    const existing = lastActiveByUser.get(log.userId);
+    if (!existing || log.timestamp > existing) {
+      lastActiveByUser.set(log.userId, log.timestamp);
+    }
+  }
+
+  const engagement: StoryEngagementViewer[] = viewers.map((member) => ({
+    userId: member.user.id,
+    name: member.user.name || member.user.email.split('@')[0],
+    lastActiveAt: lastActiveByUser.get(member.user.id) ?? null,
+    watchedStoryIds: Array.from(watchedByUser.get(member.user.id) ?? []),
+  }));
+
+  return { viewers: engagement, stories };
 }

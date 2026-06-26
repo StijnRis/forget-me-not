@@ -13,6 +13,7 @@ import {
   Trash2,
   Bell,
   UserCircle,
+  Eye,
   type LucideIcon,
 } from 'lucide-react';
 import { ActivityType } from '@/lib/db/schema';
@@ -34,6 +35,7 @@ const iconMap: Record<ActivityType, LucideIcon> = {
   [ActivityType.CREATE_HABIT]: Bell,
   [ActivityType.DELETE_HABIT]: Trash2,
   [ActivityType.UPDATE_PROFILE]: UserCircle,
+  [ActivityType.VIEW_STORY]: Eye,
 };
 
 function getRelativeTime(date: Date) {
@@ -82,6 +84,8 @@ function formatAction(action: ActivityType): string {
       return 'You removed a reminder';
     case ActivityType.UPDATE_PROFILE:
       return 'You updated your profile';
+    case ActivityType.VIEW_STORY:
+      return 'You finished watching a story';
     default:
       return 'Unknown action occurred';
   }
@@ -103,10 +107,9 @@ export default async function ActivityPage() {
           {logs.length > 0 ? (
             <ul className="space-y-4">
               {logs.map((log) => {
-                const Icon = iconMap[log.action as ActivityType] || Settings;
-                const formattedAction = formatAction(
-                  log.action as ActivityType
-                );
+                const baseAction = log.action.split(':')[0] as ActivityType;
+                const Icon = iconMap[baseAction] || Settings;
+                const formattedAction = formatAction(baseAction);
 
                 return (
                   <li key={log.id} className="flex items-center space-x-4">
