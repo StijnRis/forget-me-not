@@ -457,9 +457,12 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
               <div className="text-green-700 text-sm space-y-1">
                 <p>{inviteState.success}</p>
                 {inviteState.inviteLink && (
-                  <p className="break-all text-xs bg-white p-2 rounded border">
+                  <a
+                    href={inviteState.inviteLink}
+                    className="block break-all text-xs bg-white p-2 rounded border text-sky-700 hover:underline"
+                  >
                     {inviteState.inviteLink}
-                  </p>
+                  </a>
                 )}
               </div>
             )}

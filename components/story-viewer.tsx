@@ -19,6 +19,12 @@ import { playReminderSound, primeReminderAudio } from '@/lib/reminder-sound';
 
 const INACTIVITY_MS = 15 * 60 * 1000;
 const AUTO_ADVANCE_DELAY_MS = 10_000;
+const TEST_REMINDER_TITLE = 'Remember to eat dinner';
+
+function formatCurrentTime(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
 
 function ReminderBanner({
   reminder,
@@ -28,12 +34,13 @@ function ReminderBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="relative z-20 mx-4 mt-4 rounded-2xl bg-amber-400 px-6 py-5 shadow-lg animate-pulse">
+    <div className="fixed top-4 left-4 right-4 z-[100] mx-auto max-w-3xl rounded-2xl bg-amber-400 px-6 py-5 shadow-lg animate-pulse">
       <div className="flex items-center gap-4">
         <Bell className="h-8 w-8 text-amber-900 shrink-0" />
         <div>
           <p className="text-lg font-bold text-amber-950">Reminder</p>
           <p className="text-2xl font-semibold text-amber-950">{reminder.title}</p>
+          <p className="text-lg font-medium text-amber-900/90">{reminder.scheduledTime}</p>
         </div>
         <Button
           size="lg"
@@ -89,9 +96,14 @@ export function StoryViewer({
   );
   const [activeReminder, setActiveReminder] = useState<Habit | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
+  const [storyShare, setStoryShare] = useState<number | null>(null);
+  const [isPausePhase, setIsPausePhase] = useState(false);
   const notifiedRef = useRef<Set<string>>(new Set());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastStoryProgressRef = useRef(0);
+  const mainRef = useRef<HTMLElement>(null);
   const { needsGesture, enterFullscreen } = useStoryFullscreen();
 
   // Stories are oldest-first (index 0 = story 1, the oldest)
@@ -126,11 +138,37 @@ export function StoryViewer({
 
   useEffect(() => {
     setStoryProgress(0);
+    setStoryShare(null);
+    setIsPausePhase(false);
+    lastStoryProgressRef.current = 0;
     if (advanceTimerRef.current) {
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
     }
+    if (pauseIntervalRef.current) {
+      clearInterval(pauseIntervalRef.current);
+      pauseIntervalRef.current = null;
+    }
   }, [story?.id]);
+
+  const handleStoryDuration = useCallback((durationMs: number) => {
+    if (durationMs <= 0) return;
+    const share = durationMs / (durationMs + AUTO_ADVANCE_DELAY_MS);
+    setStoryShare(share);
+    setStoryProgress(lastStoryProgressRef.current * share);
+  }, []);
+
+  const handleStoryProgress = useCallback(
+    (progress: number) => {
+      lastStoryProgressRef.current = progress;
+      if (storyShare === null) {
+        setStoryProgress(progress);
+        return;
+      }
+      setStoryProgress(progress * storyShare);
+    },
+    [storyShare]
+  );
 
   const logStoryView = useCallback(
     async (viewedStoryId: number) => {
@@ -146,24 +184,53 @@ export function StoryViewer({
     [previewMode, teamId]
   );
 
-  const handleStoryComplete = useCallback(() => {
-    if (!story) return;
+  const handleStoryComplete = useCallback(
+    (durationMs: number) => {
+      if (!story) return;
 
-    void logStoryView(story.id);
+      const share =
+        durationMs > 0
+          ? durationMs / (durationMs + AUTO_ADVANCE_DELAY_MS)
+          : storyShare ?? 0.9;
 
-    if (advanceTimerRef.current) {
-      clearTimeout(advanceTimerRef.current);
-    }
+      setStoryShare(share);
+      setStoryProgress(share);
+      setIsPausePhase(true);
+      void logStoryView(story.id);
 
-    advanceTimerRef.current = setTimeout(() => {
-      goToNext();
-    }, AUTO_ADVANCE_DELAY_MS);
-  }, [story, logStoryView, goToNext]);
+      if (pauseIntervalRef.current) {
+        clearInterval(pauseIntervalRef.current);
+      }
+
+      const pauseStart = Date.now();
+      pauseIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - pauseStart;
+        const pauseProgress = Math.min(elapsed / AUTO_ADVANCE_DELAY_MS, 1);
+        setStoryProgress(share + pauseProgress * (1 - share));
+      }, 50);
+
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+      }
+
+      advanceTimerRef.current = setTimeout(() => {
+        if (pauseIntervalRef.current) {
+          clearInterval(pauseIntervalRef.current);
+          pauseIntervalRef.current = null;
+        }
+        goToNext();
+      }, AUTO_ADVANCE_DELAY_MS);
+    },
+    [story, storyShare, logStoryView, goToNext]
+  );
 
   useEffect(() => {
     return () => {
       if (advanceTimerRef.current) {
         clearTimeout(advanceTimerRef.current);
+      }
+      if (pauseIntervalRef.current) {
+        clearInterval(pauseIntervalRef.current);
       }
     };
   }, []);
@@ -208,7 +275,7 @@ export function StoryViewer({
 
   const checkReminders = useCallback(() => {
     const now = new Date();
-    const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const current = formatCurrentTime();
 
     for (const habit of habits) {
       const key = `${habit.id}-${now.toDateString()}-${habit.scheduledTime}`;
@@ -219,6 +286,39 @@ export function StoryViewer({
       }
     }
   }, [habits]);
+
+  const triggerTestReminder = useCallback(() => {
+    setActiveReminder({
+      id: -1,
+      teamId,
+      createdById: 0,
+      title: TEST_REMINDER_TITLE,
+      scheduledTime: formatCurrentTime(),
+      createdAt: new Date(),
+    });
+    void playReminderSound();
+  }, [teamId]);
+
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [story?.id]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'r' && event.key !== 'R') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      triggerTestReminder();
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [triggerTestReminder]);
 
   useEffect(() => {
     const prime = () => primeReminderAudio();
@@ -256,13 +356,13 @@ export function StoryViewer({
             Tap anywhere to enter fullscreen
           </button>
         )}
+        {activeReminder && (
+          <ReminderBanner
+            reminder={activeReminder}
+            onDismiss={() => setActiveReminder(null)}
+          />
+        )}
         <main className="relative flex min-h-[100dvh] flex-col bg-sky-50 px-6">
-          {activeReminder && (
-            <ReminderBanner
-              reminder={activeReminder}
-              onDismiss={() => setActiveReminder(null)}
-            />
-          )}
           <div className="flex flex-1 items-center justify-center">
           {previewMode && (
             <div className="absolute top-0 left-0 right-0 bg-sky-100 border-b border-sky-200 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2">
@@ -319,7 +419,17 @@ export function StoryViewer({
           Tap anywhere to enter fullscreen
         </button>
       )}
-      <main className="relative min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden pb-2">
+      {activeReminder && (
+        <ReminderBanner
+          reminder={activeReminder}
+          onDismiss={() => setActiveReminder(null)}
+        />
+      )}
+      <main
+        ref={mainRef}
+        tabIndex={-1}
+        className="relative min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden pb-2 outline-none"
+      >
       {previewMode && (
         <div className="relative z-20 bg-sky-100 border-b border-sky-200 px-4 py-2 text-center text-sm text-sky-800 flex items-center justify-center gap-2">
           <Eye className="h-4 w-4" />
@@ -344,13 +454,6 @@ export function StoryViewer({
             : 'bg-gradient-to-b from-sky-100 to-sky-50'
         }`}
       />
-
-      {activeReminder && (
-        <ReminderBanner
-          reminder={activeReminder}
-          onDismiss={() => setActiveReminder(null)}
-        />
-      )}
 
       <div
         key={story.id}
@@ -410,7 +513,8 @@ export function StoryViewer({
           storyId={story.id}
           text={story.content}
           onLightBackground={!story.imageUrl}
-          onProgress={setStoryProgress}
+          onDuration={handleStoryDuration}
+          onProgress={handleStoryProgress}
           onComplete={handleStoryComplete}
         />
 
@@ -452,7 +556,11 @@ export function StoryViewer({
         aria-label="Story reading progress"
       >
         <div
-          className={cn('h-full transition-[width] duration-150 ease-linear', progressBarClass)}
+          className={cn(
+            'h-full ease-linear',
+            isPausePhase ? 'transition-[width] duration-75' : 'transition-[width] duration-150',
+            progressBarClass
+          )}
           style={{ width: `${storyProgress * 100}%` }}
         />
       </div>

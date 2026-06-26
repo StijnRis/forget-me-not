@@ -14,11 +14,20 @@ export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect');
   const priceId = searchParams.get('priceId');
-  const inviteId = searchParams.get('inviteId');
+  const inviteEmail = searchParams.get('email');
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     mode === 'signin' ? signIn : signUp,
     { error: '' }
   );
+
+  const otherModeParams = new URLSearchParams();
+  if (redirect) otherModeParams.set('redirect', redirect);
+  if (priceId) otherModeParams.set('priceId', priceId);
+  if (inviteEmail) otherModeParams.set('email', inviteEmail);
+  const otherModeQuery = otherModeParams.toString();
+  const otherModeHref = `${mode === 'signin' ? '/sign-up' : '/sign-in'}${
+    otherModeQuery ? `?${otherModeQuery}` : ''
+  }`;
 
   return (
     <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
@@ -31,13 +40,13 @@ export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
             ? 'Sign in to your account'
             : 'Create your account'}
         </h2>
-        {inviteId && mode === 'signup' && (
+        {inviteEmail && mode === 'signup' && (
           <p className="mt-3 text-center text-sm text-sky-700 bg-sky-50 rounded-lg px-4 py-2">
             You&apos;ve been invited to join a family group. Create an account
-            with the invited email to join.
+            with this email, then accept the invitation on your teams page.
           </p>
         )}
-        {inviteId && mode === 'signin' && (
+        {inviteEmail && mode === 'signin' && (
           <p className="mt-3 text-center text-sm text-sky-700 bg-sky-50 rounded-lg px-4 py-2">
             Sign in with the invited email, then accept the invitation on your
             teams page.
@@ -49,7 +58,6 @@ export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
         <form className="space-y-6" action={formAction}>
           <input type="hidden" name="redirect" value={redirect || ''} />
           <input type="hidden" name="priceId" value={priceId || ''} />
-          <input type="hidden" name="inviteId" value={inviteId || ''} />
           <div>
             <Label
               htmlFor="email"
@@ -63,7 +71,7 @@ export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
                 name="email"
                 type="email"
                 autoComplete="email"
-                defaultValue={state.email}
+                defaultValue={state.email || inviteEmail || ''}
                 required
                 maxLength={50}
                 className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
@@ -137,13 +145,7 @@ export function LoginForm({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
 
           <div className="mt-6">
             <Link
-              href={`${mode === 'signin' ? '/sign-up' : '/sign-in'}${
-                redirect ? `?redirect=${redirect}` : ''
-              }${priceId ? `${redirect ? '&' : '?'}priceId=${priceId}` : ''}${
-                inviteId
-                  ? `${redirect || priceId ? '&' : '?'}inviteId=${inviteId}`
-                  : ''
-              }`}
+              href={otherModeHref}
               className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-full shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
             >
               {mode === 'signin'

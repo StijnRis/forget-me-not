@@ -33,6 +33,7 @@ import {
   validatePersonWithDementiaSlot,
 } from '@/lib/team-access';
 import { sendInvitationEmail } from '@/lib/email';
+import { buildSignUpInviteLink } from '@/lib/invite-links';
 
 const signInSchema = z.object({
   email: z.string().email().min(3).max(255),
@@ -99,11 +100,10 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 const signUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  inviteId: z.string().optional(),
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId } = data;
+  const { email, password } = data;
 
   const existingUser = await db
     .select()
@@ -138,38 +138,15 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     };
   }
 
-  let createdTeam: typeof teams.$inferSelect | null = null;
-
-  if (inviteId) {
-    const result = await acceptInvitationForUser(
-      parseInt(inviteId),
-      createdUser.id,
-      email
-    );
-
-    if (result.error) {
-      return { error: result.error, email, password };
-    }
-
-    if (result.teamId) {
-      await logActivity(result.teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-      [createdTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, result.teamId))
-        .limit(1);
-    }
-  }
-
   await Promise.all([
-    logActivity(createdTeam?.id, createdUser.id, ActivityType.SIGN_UP),
+    logActivity(null, createdUser.id, ActivityType.SIGN_UP),
     setSession(createdUser),
   ]);
 
   const redirectTo = formData.get('redirect') as string | null;
   if (redirectTo === 'checkout') {
     const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: createdTeam, priceId });
+    return createCheckoutSession({ team: null, priceId });
   }
 
   redirect('/teams');
@@ -447,9 +424,9 @@ export const inviteTeamMember = validatedActionWithUser(
       where: eq(teams.id, teamId),
     });
 
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const inviteLink = `${baseUrl}/sign-up?inviteId=${invitation.id}`;
-    const signInLink = `${baseUrl}/sign-in`;
+    const inviteLink = buildSignUpInviteLink(email);
+    const signInParams = new URLSearchParams({ email });
+    const signInLink = `${process.env.BASE_URL || 'http://localhost:3000'}/sign-in?${signInParams.toString()}`;
 
     const emailResult = await sendInvitationEmail({
       to: email,

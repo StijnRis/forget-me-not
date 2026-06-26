@@ -73,7 +73,7 @@ ${params.signInLink}
     </p>
     <p>
       <a href="${params.inviteLink}" style="display: inline-block; background: #0284c7; color: #fff; padding: 12px 20px; border-radius: 9999px; text-decoration: none; font-weight: 600;">
-        Create account &amp; join
+        Create account
       </a>
     </p>
     <p style="font-size: 14px; color: #4b5563;">

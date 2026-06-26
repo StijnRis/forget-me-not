@@ -14,7 +14,8 @@ type SpeakingStoryTextProps = {
   text: string;
   onLightBackground?: boolean;
   onProgress?: (progress: number) => void;
-  onComplete?: () => void;
+  onDuration?: (durationMs: number) => void;
+  onComplete?: (durationMs: number) => void;
 };
 
 export function SpeakingStoryText({
@@ -22,6 +23,7 @@ export function SpeakingStoryText({
   text,
   onLightBackground = true,
   onProgress,
+  onDuration,
   onComplete,
 }: SpeakingStoryTextProps) {
   const [words, setWords] = useState<WordTiming[]>([]);
@@ -33,13 +35,15 @@ export function SpeakingStoryText({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const onProgressRef = useRef(onProgress);
+  const onDurationRef = useRef(onDuration);
   const onCompleteRef = useRef(onComplete);
   const completedRef = useRef(false);
 
   useEffect(() => {
     onProgressRef.current = onProgress;
+    onDurationRef.current = onDuration;
     onCompleteRef.current = onComplete;
-  }, [onProgress, onComplete]);
+  }, [onProgress, onDuration, onComplete]);
 
   useEffect(() => {
     completedRef.current = false;
@@ -132,11 +136,17 @@ export function SpeakingStoryText({
     const audio = audioRef.current;
     if (!audio || words.length === 0) return;
 
-    const notifyComplete = () => {
+    const notifyComplete = (durationMs: number) => {
       if (completedRef.current) return;
       completedRef.current = true;
-      onProgressRef.current?.(1);
-      onCompleteRef.current?.();
+      onCompleteRef.current?.(durationMs);
+    };
+
+    const handleLoadedMetadata = () => {
+      const duration = audio.duration;
+      if (duration > 0 && Number.isFinite(duration)) {
+        onDurationRef.current?.(duration * 1000);
+      }
     };
 
     const handleTimeUpdate = () => {
@@ -162,13 +172,23 @@ export function SpeakingStoryText({
 
     const handleEnded = () => {
       setCurrentWordIndex(null);
-      notifyComplete();
+      const durationMs =
+        audio.duration > 0 && Number.isFinite(audio.duration)
+          ? audio.duration * 1000
+          : 0;
+      notifyComplete(durationMs);
     };
 
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
 
+    if (audio.readyState >= 1) {
+      handleLoadedMetadata();
+    }
+
     return () => {
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
     };
@@ -180,6 +200,7 @@ export function SpeakingStoryText({
 
     const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
     const durationMs = Math.max(wordCount * 400, 8000);
+    onDurationRef.current?.(durationMs);
     const startedAt = Date.now();
 
     const interval = setInterval(() => {
@@ -190,7 +211,7 @@ export function SpeakingStoryText({
         clearInterval(interval);
         if (!completedRef.current) {
           completedRef.current = true;
-          onCompleteRef.current?.();
+          onCompleteRef.current?.(durationMs);
         }
       }
     }, 200);
