@@ -4,6 +4,7 @@ import {
   getElevenLabsVoiceId,
 } from '@/lib/elevenlabs';
 import { getUser } from '@/lib/db/queries';
+import { getCachedTts, setCachedTts } from '@/lib/tts-cache';
 
 function logTtsError(label: string, details: unknown) {
   console.log(`[TTS] ${label}`, details);
@@ -46,10 +47,20 @@ export async function POST(request: Request) {
       textLength: text.trim().length,
     });
 
+    const trimmedText = text.trim();
+    const cached = await getCachedTts(selectedVoiceId, trimmedText);
+    if (cached) {
+      logTtsError('cache hit', {
+        voiceId: selectedVoiceId,
+        textLength: trimmedText.length,
+      });
+      return NextResponse.json(cached);
+    }
+
     const responseData = await elevenlabs.textToSpeech.convertWithTimestamps(
       selectedVoiceId,
       {
-        text: text.trim(),
+        text: trimmedText,
         modelId: 'eleven_flash_v2_5',
         outputFormat: 'mp3_44100_128',
       }
@@ -69,14 +80,18 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
+    const payload = {
       audio: `data:audio/mpeg;base64,${responseData.audioBase64}`,
       alignment: {
         characters: alignment.characters,
         character_start_times_seconds: alignment.characterStartTimesSeconds,
         character_end_times_seconds: alignment.characterEndTimesSeconds,
       },
-    });
+    };
+
+    await setCachedTts(selectedVoiceId, trimmedText, payload);
+
+    return NextResponse.json(payload);
   } catch (error) {
     logTtsError('ElevenLabs API error', {
       message: error instanceof Error ? error.message : String(error),
