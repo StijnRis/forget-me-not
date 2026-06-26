@@ -40,6 +40,7 @@ export default async function TeamStoryViewPage({
       previewMode={isCaregiver(membership.role)}
       initialStories={stories}
       initialHabits={habits}
+      betweenStoriesAudioUrl={membership.team.betweenStoriesAudioUrl}
     />
   );
 }

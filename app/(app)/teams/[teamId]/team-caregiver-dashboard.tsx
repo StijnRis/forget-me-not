@@ -18,6 +18,7 @@ import {
   createStory,
   deleteHabit,
   deleteStory,
+  updateBetweenStoriesAudio,
   updateProfile,
 } from '@/app/(app)/actions';
 import { inviteTeamMember, removeTeamMember } from '@/lib/actions/auth';
@@ -31,6 +32,7 @@ import {
   Clock,
   Eye,
   Loader2,
+  Music,
   Trash2,
   TriangleAlert,
   UserCircle,
@@ -147,6 +149,10 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
   );
   const [deleteStoryState, deleteStoryAction] = useActionState<ActionState, FormData>(deleteStory, {});
   const [deleteHabitState, deleteHabitAction] = useActionState<ActionState, FormData>(deleteHabit, {});
+  const [audioState, audioAction, audioPending] = useActionState<ActionState, FormData>(
+    updateBetweenStoriesAudio,
+    {}
+  );
   const [profileFormKey, setProfileFormKey] = useState(0);
 
   useEffect(() => {
@@ -174,6 +180,10 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
       setProfileFormKey((key) => key + 1);
     })();
   }, [profileState?.success, mutateUser, mutateTeam]);
+
+  useEffect(() => {
+    if (audioState?.success) void mutateTeam();
+  }, [audioState?.success, mutateTeam]);
 
   useEffect(() => {
     if (inviteState?.success || removeState?.success) void mutateTeam();
@@ -396,6 +406,44 @@ export function TeamCaregiverDashboard({ teamId }: { teamId: number }) {
             )}
             <Button type="submit" disabled={profilePending}>
               {profilePending ? 'Saving...' : 'Save profile'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Music className="h-5 w-5 text-sky-600" />
+            Between-story audio
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={audioAction} className="space-y-4">
+            <input type="hidden" name="teamId" value={teamId} />
+            <div>
+              <Label htmlFor="betweenStoriesAudioUrl">MP3 link</Label>
+              <Input
+                id="betweenStoriesAudioUrl"
+                name="betweenStoriesAudioUrl"
+                type="url"
+                placeholder="https://example.com/family-song.mp3"
+                defaultValue={teamData?.team.betweenStoriesAudioUrl ?? ''}
+                className="mt-1"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                A short song or message that plays between each story for your loved one.
+                Leave blank to skip.
+              </p>
+            </div>
+            {audioState?.error && (
+              <p className="text-red-500 text-sm">{audioState.error}</p>
+            )}
+            {audioState?.success && (
+              <p className="text-green-600 text-sm">{audioState.success}</p>
+            )}
+            <Button type="submit" disabled={audioPending}>
+              {audioPending ? 'Saving...' : 'Save audio link'}
             </Button>
           </form>
         </CardContent>

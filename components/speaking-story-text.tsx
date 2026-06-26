@@ -35,6 +35,7 @@ export function SpeakingStoryText({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const lastHighlightedIndexRef = useRef<number | null>(null);
   const onProgressRef = useRef(onProgress);
   const onDurationRef = useRef(onDuration);
   const onCompleteRef = useRef(onComplete);
@@ -61,12 +62,14 @@ export function SpeakingStoryText({
 
     container.scrollTo({
       top: Math.max(0, targetTop),
-      behavior: 'smooth',
+      behavior: 'auto',
     });
   }, []);
 
   const highlightWord = useCallback(
     (index: number) => {
+      if (lastHighlightedIndexRef.current === index) return;
+      lastHighlightedIndexRef.current = index;
       setCurrentWordIndex(index);
       scrollWordIntoView(index);
     },
@@ -82,6 +85,7 @@ export function SpeakingStoryText({
   useEffect(() => {
     completedRef.current = false;
     setCurrentWordIndex(null);
+    lastHighlightedIndexRef.current = null;
     onProgressRef.current?.(0);
   }, [storyId, text]);
 
@@ -99,6 +103,7 @@ export function SpeakingStoryText({
       setLoading(true);
       setError(null);
       setCurrentWordIndex(null);
+      lastHighlightedIndexRef.current = null;
       setWords([]);
       setAudioSrc(null);
 
@@ -184,42 +189,48 @@ export function SpeakingStoryText({
       }
     };
 
-    const handleTimeUpdate = () => {
+    let rafId = 0;
+    const updatePlayback = () => {
       const duration = audio.duration;
-      if (duration > 0 && Number.isFinite(duration)) {
+      if (duration > 0 && Number.isFinite(duration) && !audio.paused && !audio.ended) {
         onProgressRef.current?.(Math.min(audio.currentTime / duration, 1));
+
+        const currentTime = audio.currentTime;
+        const index = words.findIndex(
+          (w) => currentTime >= w.start && currentTime <= w.end + 0.05
+        );
+
+        if (index !== -1) {
+          highlightWord(index);
+        }
       }
 
-      const currentTime = audio.currentTime;
-      const index = words.findIndex(
-        (w) => currentTime >= w.start && currentTime <= w.end + 0.05
-      );
-
-      if (index !== -1) {
-        highlightWord(index);
-      }
+      rafId = requestAnimationFrame(updatePlayback);
     };
 
     const handleEnded = () => {
       setCurrentWordIndex(null);
+      lastHighlightedIndexRef.current = null;
       const durationMs =
         audio.duration > 0 && Number.isFinite(audio.duration)
           ? audio.duration * 1000
           : 0;
+      onProgressRef.current?.(1);
       notifyComplete(durationMs);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
 
     if (audio.readyState >= 1) {
       handleLoadedMetadata();
     }
 
+    rafId = requestAnimationFrame(updatePlayback);
+
     return () => {
+      cancelAnimationFrame(rafId);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
     };
   }, [words, audioSrc, highlightWord]);

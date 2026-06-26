@@ -288,3 +288,23 @@
   background: rgb(125 211 252 / 0.75);
   border-radius: 9999px;
 }
+
+@keyframes reminder-pulse {
+  0%,
+  100% {
+    background-color: rgb(251 191 36);
+    box-shadow:
+      0 10px 25px -5px rgb(0 0 0 / 0.25),
+      0 0 0 0 rgb(245 158 11 / 0);
+  }
+  50% {
+    background-color: rgb(253 224 71);
+    box-shadow:
+      0 10px 25px -5px rgb(0 0 0 / 0.3),
+      0 0 0 8px rgb(245 158 11 / 0.45);
+  }
+}
+
+.reminder-pulse {
+  animation: reminder-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

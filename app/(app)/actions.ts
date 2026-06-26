@@ -9,6 +9,7 @@ import {
   habits,
   stories,
   teamMembers,
+  teams,
   users,
 } from '@/lib/db/schema';
 import { validatedActionWithUser } from '@/lib/auth/actions';
@@ -173,5 +174,38 @@ export const updateProfile = validatedActionWithUser(
     revalidatePath(`/teams/${data.teamId}`);
     revalidatePath(`/teams/${data.teamId}/view`);
     return { success: 'Profile updated.' };
+  }
+);
+
+const updateBetweenStoriesAudioSchema = z.object({
+  teamId: z.coerce.number(),
+  betweenStoriesAudioUrl: z
+    .string()
+    .optional()
+    .transform((v) => (v === '' ? null : v ?? null))
+    .pipe(
+      z.union([
+        z.null(),
+        z.string().url('Enter a valid URL to an MP3 file'),
+      ])
+    ),
+});
+
+export const updateBetweenStoriesAudio = validatedActionWithUser(
+  updateBetweenStoriesAudioSchema,
+  async (data, _, user) => {
+    const { error } = await requireCaregiverOnTeam(user.id, data.teamId);
+    if (error) return { error };
+
+    await db
+      .update(teams)
+      .set({
+        betweenStoriesAudioUrl: data.betweenStoriesAudioUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(teams.id, data.teamId));
+
+    teamPaths(data.teamId).forEach((p) => revalidatePath(p));
+    return { success: 'Between-story audio updated.' };
   }
 );

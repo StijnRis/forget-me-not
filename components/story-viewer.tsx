@@ -35,7 +35,7 @@ function ReminderBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="fixed top-4 left-4 right-4 z-[100] mx-auto max-w-3xl rounded-2xl bg-amber-400 px-6 py-5 shadow-lg animate-pulse">
+    <div className="reminder-pulse fixed top-4 left-4 right-4 z-[100] mx-auto max-w-3xl rounded-2xl border border-amber-500 bg-amber-400 px-6 py-5">
       <div className="flex items-center gap-4">
         <Bell className="h-8 w-8 text-amber-900 shrink-0" />
         <div>
@@ -63,6 +63,7 @@ type StoryViewerProps = {
   previewMode?: boolean;
   initialStories?: StoryWithAuthor[];
   initialHabits?: Habit[];
+  betweenStoriesAudioUrl?: string | null;
 };
 
 type StoryTransition = 'initial' | 'older' | 'newer';
@@ -74,6 +75,7 @@ export function StoryViewer({
   previewMode = false,
   initialStories,
   initialHabits,
+  betweenStoriesAudioUrl = null,
 }: StoryViewerProps) {
   const router = useRouter();
   const [transition, setTransition] = useState<StoryTransition>('initial');
@@ -96,14 +98,16 @@ export function StoryViewer({
     }
   );
   const [activeReminder, setActiveReminder] = useState<Habit | null>(null);
-  const [storyProgress, setStoryProgress] = useState(0);
+  const [barProgress, setBarProgress] = useState(0);
   const [storyShare, setStoryShare] = useState<number | null>(null);
-  const [isPausePhase, setIsPausePhase] = useState(false);
   const notifiedRef = useRef<Set<string>>(new Set());
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastStoryProgressRef = useRef(0);
+  const progressTargetRef = useRef(0);
+  const interstitialAudioRef = useRef<HTMLAudioElement | null>(null);
+  const interstitialPauseMsRef = useRef(AUTO_ADVANCE_DELAY_MS);
   const mainRef = useRef<HTMLElement>(null);
   const missedNotificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeReminderRef = useRef<Habit | null>(null);
@@ -144,10 +148,10 @@ export function StoryViewer({
   }, [index, navigateToIndex]);
 
   useEffect(() => {
-    setStoryProgress(0);
+    setBarProgress(0);
     setStoryShare(null);
-    setIsPausePhase(false);
     lastStoryProgressRef.current = 0;
+    progressTargetRef.current = 0;
     if (advanceTimerRef.current) {
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
@@ -160,7 +164,49 @@ export function StoryViewer({
       clearTimeout(missedNotificationTimerRef.current);
       missedNotificationTimerRef.current = null;
     }
+    if (interstitialAudioRef.current) {
+      interstitialAudioRef.current.pause();
+      interstitialAudioRef.current.currentTime = 0;
+    }
   }, [story?.id]);
+
+  useEffect(() => {
+    if (!betweenStoriesAudioUrl) {
+      interstitialPauseMsRef.current = AUTO_ADVANCE_DELAY_MS;
+      return;
+    }
+
+    const audio = new Audio(betweenStoriesAudioUrl);
+    interstitialAudioRef.current = audio;
+
+    const handleMetadata = () => {
+      if (audio.duration > 0 && Number.isFinite(audio.duration)) {
+        interstitialPauseMsRef.current = Math.max(
+          Math.round(audio.duration * 1000),
+          AUTO_ADVANCE_DELAY_MS
+        );
+      }
+    };
+
+    audio.addEventListener('loadedmetadata', handleMetadata);
+    audio.load();
+    if (audio.readyState >= 1) {
+      handleMetadata();
+    }
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleMetadata);
+      audio.pause();
+      audio.src = '';
+      interstitialAudioRef.current = null;
+    };
+  }, [betweenStoriesAudioUrl]);
+
+  const getPauseDurationMs = useCallback(() => {
+    return betweenStoriesAudioUrl
+      ? interstitialPauseMsRef.current
+      : AUTO_ADVANCE_DELAY_MS;
+  }, [betweenStoriesAudioUrl]);
 
   const clearMissedNotificationTimer = useCallback(() => {
     if (missedNotificationTimerRef.current) {
@@ -168,6 +214,22 @@ export function StoryViewer({
       missedNotificationTimerRef.current = null;
     }
   }, []);
+
+  const logMissedNotification = useCallback(
+    (reminder: Habit) => {
+      if (previewMode) return;
+
+      void fetch(`/api/teams/${teamId}/reminders/missed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          habitId: reminder.id,
+          title: reminder.title,
+        }),
+      });
+    },
+    [previewMode, teamId]
+  );
 
   const scheduleMissedNotificationLog = useCallback(
     (reminder: Habit) => {
@@ -185,17 +247,10 @@ export function StoryViewer({
           return;
         }
 
-        void fetch(`/api/teams/${teamId}/reminders/missed`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            habitId: current.id,
-            title: current.title,
-          }),
-        });
+        logMissedNotification(current);
       }, MISSED_NOTIFICATION_MS);
     },
-    [previewMode, teamId, clearMissedNotificationTimer]
+    [previewMode, clearMissedNotificationTimer, logMissedNotification]
   );
 
   const showReminder = useCallback(
@@ -211,24 +266,51 @@ export function StoryViewer({
     setActiveReminder(null);
   }, [clearMissedNotificationTimer]);
 
+  const dismissReminderAsMissed = useCallback(() => {
+    const reminder = activeReminderRef.current;
+    if (!reminder) return;
+
+    clearMissedNotificationTimer();
+    logMissedNotification(reminder);
+    setActiveReminder(null);
+  }, [clearMissedNotificationTimer, logMissedNotification]);
+
   const handleStoryDuration = useCallback((durationMs: number) => {
     if (durationMs <= 0) return;
-    const share = durationMs / (durationMs + AUTO_ADVANCE_DELAY_MS);
+    const pauseMs = getPauseDurationMs();
+    const share = durationMs / (durationMs + pauseMs);
     setStoryShare(share);
-    setStoryProgress(lastStoryProgressRef.current * share);
-  }, []);
+    progressTargetRef.current = lastStoryProgressRef.current * share;
+  }, [getPauseDurationMs]);
 
   const handleStoryProgress = useCallback(
     (progress: number) => {
       lastStoryProgressRef.current = progress;
-      if (storyShare === null) {
-        setStoryProgress(progress);
-        return;
-      }
-      setStoryProgress(progress * storyShare);
+      progressTargetRef.current =
+        storyShare === null ? progress : progress * storyShare;
     },
     [storyShare]
   );
+
+  useEffect(() => {
+    if (!story) return;
+
+    let rafId = 0;
+    const smoothProgress = () => {
+      setBarProgress((current) => {
+        const target = progressTargetRef.current;
+        const delta = target - current;
+        if (Math.abs(delta) < 0.0008) {
+          return target;
+        }
+        return current + delta * 0.18;
+      });
+      rafId = requestAnimationFrame(smoothProgress);
+    };
+
+    rafId = requestAnimationFrame(smoothProgress);
+    return () => cancelAnimationFrame(rafId);
+  }, [story?.id]);
 
   const logStoryView = useCallback(
     async (viewedStoryId: number) => {
@@ -248,14 +330,14 @@ export function StoryViewer({
     (durationMs: number) => {
       if (!story) return;
 
+      const pauseMs = getPauseDurationMs();
       const share =
         durationMs > 0
-          ? durationMs / (durationMs + AUTO_ADVANCE_DELAY_MS)
+          ? durationMs / (durationMs + pauseMs)
           : storyShare ?? 0.9;
 
       setStoryShare(share);
-      setStoryProgress(share);
-      setIsPausePhase(true);
+      progressTargetRef.current = share;
       void logStoryView(story.id);
 
       if (pauseIntervalRef.current) {
@@ -265,23 +347,58 @@ export function StoryViewer({
       const pauseStart = Date.now();
       pauseIntervalRef.current = setInterval(() => {
         const elapsed = Date.now() - pauseStart;
-        const pauseProgress = Math.min(elapsed / AUTO_ADVANCE_DELAY_MS, 1);
-        setStoryProgress(share + pauseProgress * (1 - share));
+        const pauseProgress = Math.min(elapsed / pauseMs, 1);
+        progressTargetRef.current = share + pauseProgress * (1 - share);
       }, 50);
 
       if (advanceTimerRef.current) {
         clearTimeout(advanceTimerRef.current);
       }
 
-      advanceTimerRef.current = setTimeout(() => {
+      let advanced = false;
+      const advanceToNextStory = () => {
+        if (advanced) return;
+        advanced = true;
+
         if (pauseIntervalRef.current) {
           clearInterval(pauseIntervalRef.current);
           pauseIntervalRef.current = null;
         }
+        if (advanceTimerRef.current) {
+          clearTimeout(advanceTimerRef.current);
+          advanceTimerRef.current = null;
+        }
+        if (interstitialAudioRef.current) {
+          interstitialAudioRef.current.pause();
+          interstitialAudioRef.current.currentTime = 0;
+        }
         goToNext();
-      }, AUTO_ADVANCE_DELAY_MS);
+      };
+
+      if (betweenStoriesAudioUrl) {
+        const audio =
+          interstitialAudioRef.current ?? new Audio(betweenStoriesAudioUrl);
+        interstitialAudioRef.current = audio;
+        audio.currentTime = 0;
+
+        const handleEnded = () => {
+          audio.removeEventListener('ended', handleEnded);
+          advanceToNextStory();
+        };
+
+        audio.addEventListener('ended', handleEnded);
+        void audio.play().catch(() => {
+          advanceTimerRef.current = setTimeout(advanceToNextStory, pauseMs);
+        });
+        advanceTimerRef.current = setTimeout(
+          advanceToNextStory,
+          Math.max(pauseMs, 120_000)
+        );
+      } else {
+        advanceTimerRef.current = setTimeout(advanceToNextStory, pauseMs);
+      }
     },
-    [story, storyShare, logStoryView, goToNext]
+    [story, storyShare, logStoryView, goToNext, getPauseDurationMs, betweenStoriesAudioUrl]
   );
 
   useEffect(() => {
@@ -368,20 +485,32 @@ export function StoryViewer({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'r' && event.key !== 'R') return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
         return;
       }
 
-      event.preventDefault();
-      event.stopPropagation();
-      triggerTestReminder();
+      if (event.key === 'r' || event.key === 'R') {
+        event.preventDefault();
+        event.stopPropagation();
+        triggerTestReminder();
+        return;
+      }
+
+      if (event.key === 'n' || event.key === 'N') {
+        if (!activeReminderRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dismissReminderAsMissed();
+      }
     };
 
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [triggerTestReminder]);
+  }, [triggerTestReminder, dismissReminderAsMissed]);
 
   useEffect(() => {
     const prime = () => primeReminderAudio();
@@ -615,18 +744,14 @@ export function StoryViewer({
       <div
         className="fixed bottom-0 left-0 right-0 z-30 h-2 bg-black/20"
         role="progressbar"
-        aria-valuenow={Math.round(storyProgress * 100)}
+        aria-valuenow={Math.round(barProgress * 100)}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label="Story reading progress"
       >
         <div
-          className={cn(
-            'h-full ease-linear',
-            isPausePhase ? 'transition-[width] duration-75' : 'transition-[width] duration-150',
-            progressBarClass
-          )}
-          style={{ width: `${storyProgress * 100}%` }}
+          className={cn('h-full', progressBarClass)}
+          style={{ width: `${barProgress * 100}%` }}
         />
       </div>
     </main>
